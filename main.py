@@ -74,9 +74,10 @@ def profile_system():
         locale.setlocale(locale.LC_ALL, '')
         lang = locale.getlocale()[0]
         f.write(f"Language: {lang}\n")
-        root = tk.Tk()
-        root.withdraw()
-        f.write(f"Screen Size: {root.winfo_screenwidth()}x{root.winfo_screenheight()}\n")
+        user32 = ctypes.windll.user32
+        screensize = f"{user32.GetSystemMetrics(0)}x{user32.GetSystemMetrics(1)}"
+        f.write(f"Screen Size: {screensize}\n")
+
         battery = psutil.sensors_battery()
         f.write(f"Battery: {battery.percent if battery else 'N/A'}%\n")
         f.write(f"RAM: {round(psutil.virtual_memory().total / (1024**3), 2)} GB\n")
