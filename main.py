@@ -16,7 +16,7 @@ import platform
 import psutil
 import GPUtil
 import locale
-import tkinter as tk
+
 import getpass
 import subprocess
 import win32clipboard
